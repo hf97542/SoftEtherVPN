@@ -98,6 +98,420 @@
 
 #include "CedarPch.h"
 
+/*************************************************************
+* Creepy fully functional Samba NT Authentication
+*
+* 
+*
+**************************************************************/
+
+int base64_enc_len(unsigned int plainLen) {
+	unsigned int n = plainLen;
+	return (n + 2 - ((n + 2) % 3)) / 3 * 4;
+}
+ 
+int base64_dec_len(char * input, unsigned int inputLen) {
+	unsigned int i = 0;
+	unsigned int numEq = 0;
+	for(i = inputLen - 1; input[i] == '='; i--) {
+		numEq++;
+	}
+ 
+	return ((6 * inputLen) / 8) - numEq;
+}
+ 
+bool SmbCheckLogon(char* name, char* password, char* domainname, char* groupname)
+{
+	char czBuffer[255];
+	bool bAuth = false;
+ 
+	if( name == NULL || password == NULL || domainname == NULL )
+		return false;
+ 
+	memset( czBuffer, 0, sizeof(czBuffer) );
+ 
+	int fds[2][2];
+	pid_t pid;
+ 
+	int iPipe = pipe (fds[0]);
+	int iPipe2 = pipe (fds[1]);
+ 
+	if( iPipe != 0 || iPipe2 != 0 )
+	{
+		//printf("Fehler beim Öffnen der Pipes\n");
+		return false;
+	}
+ 
+	pid = fork ();
+	if (pid == (pid_t) 0) {
+		/* write end of the file descriptor. */
+		close (fds[0][1]);
+		/* read end of the file descriptor. */
+		close (fds[1][0]);
+		
+		dup2 (fds[0][0], STDIN_FILENO);
+		dup2 (fds[1][1], STDOUT_FILENO);
+		/* Replace the child process with the ntlm_auth program. */
+		// If Groupname is given, use as requiered!
+		char czGroup[255];
+		if( groupname != NULL && strlen(groupname) > 1 )
+		{
+			sprintf( czGroup, "--require-membership-of=%s\\%s", domainname, groupname );
+			execl ("/usr/bin/ntlm_auth", "ntlm_auth","--helper-protocol=ntlm-server-1", czGroup, 0);
+		}else
+		{
+			execl ("/usr/bin/ntlm_auth", "ntlm_auth","--helper-protocol=ntlm-server-1", 0);
+		}
+ 
+		fflush(stdout);
+ 
+		_exit(EXIT_SUCCESS);
+	}
+	else {
+		FILE* out, *in;
+		/* read end of the file descriptor. */
+		close (fds[0][0]);
+		/* write end of the file descriptor. */
+		close (fds[1][1]);
+		
+		out = fdopen (fds[0][1], "w");
+ 
+		if( out == 0 )
+		{
+			//printf("Konnte die Pipe out nicht öffnen\n");
+			return false;
+		}
+ 
+		in = fdopen (fds[1][0], "r");
+ 
+		if( in == 0 )
+		{
+			//printf("Konnte die Pipe in nicht öffnen\n");
+			return false;
+		}
+ 
+		if( base64_enc_len( strlen( name) ) < sizeof( czBuffer ) &&
+			base64_enc_len( strlen( password ) ) < sizeof( czBuffer ) &&
+			base64_enc_len( strlen( domainname ) ) < sizeof( czBuffer ) )
+		{
+			B64_Encode( czBuffer, name, strlen(name) );
+			fputs( "Username:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			czBuffer[0] = 0;
+ 
+			B64_Encode( czBuffer, password, strlen(password) );
+			fputs( "Password:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			czBuffer[0] = 0;
+ 
+			B64_Encode( czBuffer, domainname, strlen(domainname) );
+			fputs( "NT-Domain:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			czBuffer[0] = 0;
+ 
+			//fputs( "Request-User-Session-Key: Yes\n", out );
+ 
+			//Samba!
+			//mux_printf(mux_id, "LANMAN-Session-Key: %s\n", hex_lm_key);
+			//mux_printf(mux_id, "User-Session-Key: %s\n", hex_user_session_key);
+ 
+			// SoftEther
+			//Copy(ret_pw_hash_hash, response->UserSessionKey, 16);
+ 
+			// Decision
+			// User-Session-Key as char array :)
+ 
+			// Start authentication
+			fputs( ".\n", out );
+ 
+			fflush (out);
+ 
+			// Request send!
+ 
+			char answer[300];
+			answer[0] = 0;
+ 
+			while( fgets( answer, sizeof( answer )-1, in ) )
+			{
+				// Copy Paste from Samba source4/utils/ntlm_auth.c 
+				/* Indicates a base64 encoded structure */
+				if( strncmp(answer, ".\n", sizeof(answer)-1 ) == 0 )
+				{
+					//printf("Ende der Uebertragung!\n");
+					break;
+				}
+ 
+				char* parameter = strstr(answer, ":: ");
+				if (!parameter) {
+					parameter = strstr(answer, ": ");
+ 
+					if (!parameter) {
+						//DEBUG(0, ("Parameter not found!\n"));
+						//fprintf(stderr, "Error: Parameter not found!\n.\n");
+						continue;
+					}
+ 
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+ 
+					char* newline  = strstr(parameter, "\n");
+					if( newline )
+						newline[0] = '\0'; // overwrite \n
+				} else {
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+ 
+					//inplace decode
+					Decode64(parameter, parameter);
+				}
+ 
+				if( strncmp(answer, "Authenticated", sizeof(answer)-1 ) == 0 )
+				{
+					if( strcmp(parameter, "Yes") == 0 )
+					{
+						// Authenticated
+						//printf("Authentifiziert!\n");
+						bAuth = true;
+					}
+					else if( strcmp(parameter, "No") == 0 )
+					{
+						// Not Authenticated
+						//printf("Keine Authentifizierung!\n");
+						bAuth = false;
+					}
+				}
+			}
+		}
+ 
+		fclose(in);
+		fclose(out);
+		close (fds[0][1]);
+		close (fds[1][0]);
+		
+		//Kill child
+		kill( pid, SIGTERM );
+ 
+		//printf("Prozess verlassen!\n");
+	}
+	return bAuth;
+}
+ 
+bool SmbPerformMsChapV2Auth(char* name, UCHAR* challenge8, UCHAR* MsChapV2_ClientResponse, char* domainname, char* groupname, UCHAR* nt_pw_hash_hash)
+{
+	char czBuffer[255];
+	bool bAuth = false;
+ 
+	if( name== NULL || challenge8 == NULL || MsChapV2_ClientResponse == NULL || nt_pw_hash_hash == NULL || domainname == NULL )
+		return false;
+ 
+	memset( czBuffer, 0, sizeof(czBuffer) );
+ 
+	int fds[2][2];
+	pid_t pid;
+ 
+	int iPipe = pipe (fds[0]);
+	int iPipe2 = pipe (fds[1]);
+ 
+	if( iPipe != 0 || iPipe2 != 0 )
+	{
+		//printf("Fehler beim Öffnen der Pipes\n");
+		return false;
+	}
+ 
+	pid = fork ();
+	if (pid == (pid_t) 0) {
+		/* write end of the file descriptor. */
+		close (fds[0][1]);
+		/* read end of the file descriptor. */
+		close (fds[1][0]);
+		/* connect to stdout/stdin */
+		dup2 (fds[0][0], STDIN_FILENO);
+		dup2 (fds[1][1], STDOUT_FILENO);
+		
+		// if groupname is given, set as required!
+		char czGroup[255];
+		if( groupname != NULL && strlen(groupname) > 1 )
+		{
+			// TAKE CARE OF THE SEPERATOR!!! 
+			sprintf( czGroup, "--require-membership-of=%s\\%s", domainname, groupname );
+			execl ("/usr/bin/ntlm_auth", "ntlm_auth","--helper-protocol=ntlm-server-1", czGroup, 0);
+		}else
+		{
+			execl ("/usr/bin/ntlm_auth", "ntlm_auth","--helper-protocol=ntlm-server-1", 0);
+		}
+		fflush(stdout);
+ 
+		_exit(EXIT_SUCCESS);
+	}
+	else {
+		FILE* out, *in;
+		/* read end of the file descriptor. */
+		close (fds[0][0]);
+		/* write end of the file descriptor. */
+		close (fds[1][1]);
+		
+		out = fdopen (fds[0][1], "w");
+ 
+		if( out == 0 )
+		{
+			//printf("Konnte die Pipe out nicht öffnen\n");
+			return false;
+		}
+ 
+		in = fdopen (fds[1][0], "r");
+ 
+		if( in == 0 )
+		{
+			//printf("Konnte die Pipe in nicht öffnen\n");
+			return false;
+		}
+ 
+		if( base64_enc_len( strlen( name) ) < sizeof( czBuffer ) &&
+			base64_enc_len( strlen( domainname ) ) < sizeof( czBuffer ))
+		{
+			B64_Encode( czBuffer, name, strlen(name) );
+			fputs( "Username:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			Debug("Username:: %s\n", czBuffer);
+			czBuffer[0] = 0;
+ 
+			B64_Encode( czBuffer, domainname, strlen(domainname) );
+			fputs( "NT-Domain:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			Debug("NT-Domain:: %s\n", czBuffer);
+			czBuffer[0] = 0;
+ 
+			char* pMsChapV2_ClientResponse = CopyBinToStr(MsChapV2_ClientResponse, 24);
+			B64_Encode( czBuffer, pMsChapV2_ClientResponse, 48 );
+			fputs( "NT-Response:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			Debug("NT-Response:: %s\n", czBuffer);
+			czBuffer[0] = 0;
+			Free(pMsChapV2_ClientResponse);
+ 
+			char* pChallenge8 = CopyBinToStr(challenge8,8);
+			B64_Encode( czBuffer, pChallenge8 , 16 );
+			fputs( "LANMAN-Challenge:: ", out );
+			fputs( czBuffer, out );
+			fputs( "\n", out );
+			Debug("LANMAN-Challenge:: %s\n", czBuffer);
+			czBuffer[0] = 0;
+			Free(pChallenge8);
+ 
+ 
+			fputs( "Request-User-Session-Key: Yes\n", out );
+			//fputs( "Request-LanMan-Session-Key: Yes\n", out );
+ 
+			//Samba!
+			//mux_printf(mux_id, "LANMAN-Session-Key: %s\n", hex_lm_key);
+			//mux_printf(mux_id, "User-Session-Key: %s\n", hex_user_session_key);
+ 
+			// SoftEther
+			//Copy(ret_pw_hash_hash, response->UserSessionKey, 16);
+ 
+			// Decision
+			// User-Session-Key as char array :)
+ 
+			// begin authentication!
+			fputs( ".\n", out );
+ 
+			fflush (out);
+ 
+			// Request send!
+ 
+			char answer[300];
+			answer[0] = 0;
+ 
+			while( fgets( answer, sizeof(answer)-1, in ) )
+			{
+				// Copy Paste from Samba source4/utils/ntlm_auth.c 
+				/* Indicates a base64 encoded structure */
+				if( strncmp(answer, ".\n", sizeof(answer)-1 ) == 0 )
+				{
+					//printf("Ende der Uebertragung!\n");
+					break;
+				}
+ 
+				char* parameter = strstr(answer, ":: ");
+				if (!parameter) {
+					parameter = strstr(answer, ": ");
+ 
+					if (!parameter) {
+						//DEBUG(0, ("Parameter not found!\n"));
+						//fprintf(stderr, "Error: Parameter not found!\n.\n");
+						continue;
+					}
+ 
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+ 
+					char* newline  = strstr(parameter, "\n");
+					if( newline )
+						newline[0] = '\0'; // overwrite \n
+				} else {
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+					parameter[0] ='\0';
+					parameter++;
+ 
+					//inplace base64 decode
+					Decode64(parameter, parameter);
+				}
+ 
+				if( strncmp(answer, "Authenticated", strlen(answer)-1 ) == 0 )
+				{
+					if( strcmp(parameter, "Yes") == 0 )
+					{
+						// Authenticated
+						//printf("Authentifiziert!\n");
+						bAuth = true;
+					}
+					else if( strcmp(parameter, "No") == 0 )
+					{
+						// Not Authenticated
+						//printf("Keine Authentifizierung!\n");
+						bAuth = false;
+					}
+				}
+				else if( strncmp(answer, "User-Session-Key", strlen(answer)-1 ) == 0 )
+				{
+					BUF* Buf = StrToBin(parameter);
+					Copy(nt_pw_hash_hash, Buf->Buf, 16);
+					FreeBuf(Buf);
+					//printf("User Session Key!\n");
+				}
+			}
+		}
+ 
+		fclose(in);
+		fclose(out);
+		close (fds[0][1]);
+		close (fds[1][0]);
+ 
+		//Kill child
+		kill( pid, SIGTERM );
+ 
+		//printf("Prozess verlassen!\n");
+	}
+	return bAuth;
+}
+
 // Password encryption
 void SecurePassword(void *secure_password, void *password, void *random)
 {
@@ -162,6 +576,9 @@ bool SamAuthUserByAnonymous(HUB *h, char *username)
 // Plaintext password authentication of user
 bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *password, bool ast, UCHAR *mschap_v2_server_response_20)
 {
+	wchar_t *groupname = NULL;
+	wchar_t *domainname = NULL;
+	
 	bool b = false;
 	wchar_t *name = NULL;
 	bool auth_by_nt = false;
@@ -216,6 +633,9 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 					{
 						name = CopyUniStr(auth->NtUsername);
 					}
+					
+					groupname = CopyStrToUni(u->GroupName);
+					
 					auth_by_nt = true;
 				}
 			}
@@ -304,10 +724,64 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 			Lock(hub->lock);
 #else	// OS_WIN32
 			// Nothing to do other than Win32
+ 
+			IPC_MSCHAP_V2_AUTHINFO mschap;
+			Unlock(hub->lock);
+ 
+			char nt_name[MAX_SIZE];
+			char nt_username[MAX_SIZE];
+			char nt_groupname[MAX_SIZE];
+			char nt_domainname[MAX_SIZE];
+			// sicher ist sicher :D std sagt zwar das ein Array leer ist ... 
+			nt_groupname[0] = 0;
+ 
+			UniToStr(nt_name, sizeof(nt_name), name);
+ 
+			if( groupname != NULL )
+				UniToStr(nt_groupname, sizeof(nt_groupname), groupname);
+ 
+			ParseNtUsername(nt_name, nt_username, sizeof(nt_username), nt_domainname, sizeof(nt_domainname), false);
+ 
+			if (ParseAndExtractMsChapV2InfoFromPassword(&mschap, password) == false)
+			{
+				// Plaintext password authentication
+				char nt_name[MAX_SIZE];
+				char nt_groupname[MAX_SIZE];
+				char nt_domain[MAX_SIZE];
+ 
+				b = SmbCheckLogon(nt_username, password, nt_domainname, nt_groupname);
+			}
+			else
+			{
+				UCHAR challenge8[8];
+				UCHAR nt_pw_hash_hash[16];
+ 
+				// MS-CHAPv2 authentication
+				MsChapV2_GenerateChallenge8(challenge8, mschap.MsChapV2_ClientChallenge,
+					mschap.MsChapV2_ServerChallenge,
+					mschap.MsChapV2_PPPUsername);
+ 
+				Debug("MsChapV2_PPPUsername = %s, nt_name = %s\n", mschap.MsChapV2_PPPUsername, nt_name);
+ 
+				b = SmbPerformMsChapV2Auth(nt_username, challenge8, mschap.MsChapV2_ClientResponse, nt_domainname, nt_groupname, nt_pw_hash_hash);
+ 
+				if (b)
+				{
+					if (mschap_v2_server_response_20 != NULL)
+					{
+						MsChapV2Server_GenerateResponse(mschap_v2_server_response_20, nt_pw_hash_hash,
+							mschap.MsChapV2_ClientResponse, challenge8);
+					}
+				}
+			}
+ 
+			Lock(hub->lock);
 #endif	// OS_WIN32
 		}
 
 		// Memory release
+		if( groupname != NULL )
+			Free(groupname);
 		Free(name);
 	}
 
