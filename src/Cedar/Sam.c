@@ -205,13 +205,13 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 {
 	if( name == NULL || password == NULL || domainname == NULL || groupname == NULL )
 	{
-		Debug("Sam.c - SmbAuthenticate - wrong parameter\n");
+		Debug("Sam.c - SmbAuthenticate - wrong password parameter\n");
 		return false;
 	}
 	
-	if( password[0] == "" && ( challenge8 == NULL || MsChapV2_ClientResponse == NULL || nt_pw_hash_hash ) )
+	if( password[0] == '\0' && ( challenge8 == NULL || MsChapV2_ClientResponse == NULL || nt_pw_hash_hash == NULL ) )
 	{
-		Debug("Sam.c - SmbAuthenticate - wrong parameter\n");
+		Debug("Sam.c - SmbAuthenticate - wrong MsCHAPv2 parameter\n");
 		return false;
 	}
 	
@@ -317,8 +317,9 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 		Debug("NT-Domain: %s\n", czBuffer);
 		czBuffer[0] = 0;
 
-		if( password[0] != "" )
+		if( password[0] != '\0' )
 		{
+			Debug("Password authentication\n");
 			end = B64_Encode( czBuffer, password, strlen(password) );
 			czBuffer[end] = '\0';
 			fputs( "Password:: ", out );
@@ -329,6 +330,7 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 		}
 		else
 		{
+			Debug("MsChapV2 authentication\n");
 			char* pMsChapV2_ClientResponse = CopyBinToStr(MsChapV2_ClientResponse, 24);
 			end = B64_Encode( czBuffer, pMsChapV2_ClientResponse, 48 );
 			czBuffer[end] = '\0';
