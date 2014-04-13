@@ -536,7 +536,6 @@ bool SamAuthUserByAnonymous(HUB *h, char *username)
 bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *password, bool ast, UCHAR *mschap_v2_server_response_20)
 {
 	wchar_t *groupname = NULL;
-	wchar_t *domainname = NULL;
 	
 	bool b = false;
 	wchar_t *name = NULL;
