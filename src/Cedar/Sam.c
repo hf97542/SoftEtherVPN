@@ -465,7 +465,7 @@ bool SmbCheckLogon(char* name, char* password, char* domainname, char* groupname
 	return SmbAuthenticate( name, password, domainname, groupname, NULL, NULL, NULL);
 }
 
-bool SmbPerformMsChapV2Auth(char* name, UCHAR* challenge8, UCHAR* MsChapV2_ClientResponse, char* domainname, char* groupname, UCHAR* nt_pw_hash_hash)
+bool SmbPerformMsChapV2Auth(char* name, char* domainname, char* groupname, UCHAR* challenge8, UCHAR* MsChapV2_ClientResponse, UCHAR* nt_pw_hash_hash)
 {
 	return SmbAuthenticate( name, "", domainname, groupname, challenge8, MsChapV2_ClientResponse, nt_pw_hash_hash);
 }
@@ -718,7 +718,7 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
  
 				Debug("MsChapV2_PPPUsername = %s, nt_name = %s\n", mschap.MsChapV2_PPPUsername, nt_name);
  
-				b = SmbPerformMsChapV2Auth(nt_username, challenge8, mschap.MsChapV2_ClientResponse, nt_domainname, nt_groupname, nt_pw_hash_hash);
+				b = SmbPerformMsChapV2Auth(nt_username, nt_domainname, nt_groupname, challenge8, mschap.MsChapV2_ClientResponse, nt_pw_hash_hash);
  
 				if (b)
 				{
