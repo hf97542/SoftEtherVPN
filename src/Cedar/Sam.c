@@ -135,13 +135,9 @@ pid_t OpenChildProcess(const char* path, char* const parameter[], int fd[] )
 	
 	pid = fork ();
 	if (pid == (pid_t) 0) {
-		// In child process
-		// Write end of the file descriptor
 		close (fds[0][1]);
-		// Read end of the file descriptor
 		close (fds[1][0]);
 		
-		// Take control of stdout and stdin
 		if( dup2 (fds[0][0], STDIN_FILENO) < 0 || dup2 (fds[1][1], STDOUT_FILENO) < 0 )
 		{
 			close (fds[0][0]);
@@ -150,7 +146,6 @@ pid_t OpenChildProcess(const char* path, char* const parameter[], int fd[] )
 			_exit(EXIT_FAILURE);
 		}
 		
-		// Replace the child process with the ntlm_auth
 		int iError = execv(path, parameter);
  
 		// We should never come here ...
@@ -161,9 +156,7 @@ pid_t OpenChildProcess(const char* path, char* const parameter[], int fd[] )
 	}
 	else if( pid > (pid_t)0 )
 	{
-		// Read end of the file descriptor
 		close (fds[0][0]);
-		// Write end of the file descriptor
 		close (fds[1][1]);
 
 		fd[0] = fds[1][0];
@@ -173,14 +166,10 @@ pid_t OpenChildProcess(const char* path, char* const parameter[], int fd[] )
 	}
 	else
 	{
-		// Read end of the file descriptor
 		close (fds[0][0]);
-		// Write end of the file descriptor
 		close (fds[1][1]);
 		
-		// Write end of the file descriptor
 		close (fds[0][1]);
-		// Read end of the file descriptor
 		close (fds[1][0]);
 		
 		return -1;
@@ -196,7 +185,6 @@ void CloseChildProcess(pid_t pid, int* fd )
 	
 	if( pid > 0 )
 	{
-		//Kill child
 		kill( pid, SIGTERM );
 	}
 }
@@ -225,21 +213,12 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 	pid_t pid;
 	char* parameter[4];
 	
-	// Take care of domainname! this is userinput!
-	// dunno if its enough -> allowed chars are:
-	// "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	// "abcdefghijklmnopqrstuvwxyz"
-	// "0123456789"
-	// " ()-_#%&.";
-	// possible to exploit?! -> single quote the parameter to disable special chars!
-	
 	// Truncate string if unsafe char 
 	EnSafeStr(domainname, '\0');
 	
-	// What happens here if someone (the bad guy) sends a wrong domainname?
 	if( strlen( domainname ) > 255 )
 	{
-		// there is no domainname longer then 255 chars! :D
+		// there is no domainname longer then 255 chars! 
 		// http://tools.ietf.org/html/rfc1035 section 2.3.4
 		domainname[255] = '\0';
 	}
@@ -280,7 +259,6 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 	{
 		CloseChildProcess(pid, fds);
 		
-		//printf("Konnte die Pipe out nicht öffnen\n");
 		Debug("Sam.c - cant open pipe out\n");
 		return false;
 	}
@@ -291,7 +269,6 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 		fclose(out);
 		CloseChildProcess(pid, fds);
 		
-		//printf("Konnte die Pipe in nicht öffnen\n");
 		Debug("Sam.c - cant open pipe out\n");
 		return false;
 	}
@@ -300,7 +277,6 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 		base64_enc_len( strlen( password ) ) < sizeof( czBuffer )-1 &&
 		base64_enc_len( strlen( domainname ) ) < sizeof( czBuffer )-1 )
 	{
-		// Strange behavior - function does not terminate string :S
 		unsigned int end = B64_Encode( czBuffer, name, strlen(name) );
 		czBuffer[end] = '\0';
 		fputs( "Username:: ", out );
@@ -352,19 +328,7 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 			Free(pChallenge8);
  
 			fputs( "Request-User-Session-Key: Yes\n", out );
-			//fputs( "Request-LanMan-Session-Key: Yes\n", out );
  		}
-
-		//Samba!
-		//mux_printf(mux_id, "LANMAN-Session-Key: %s\n", hex_lm_key);
-		//mux_printf(mux_id, "User-Session-Key: %s\n", hex_user_session_key);
- 
-		// SoftEther
-		//Copy(ret_pw_hash_hash, response->UserSessionKey, 16);
- 
-		// Decision
-		// User-Session-Key as char array :)
-
 
 		// Start authentication
 		fputs( ".\n", out );
@@ -373,30 +337,24 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 
 		// Request send!
 		
-		// This should be a Dynamic Buffer!
-		// but what happens if ntlm_auth sends trash back?
-		// we get User-Session-Key: + >=24 as Base64 coded worst -> buffer of 300 per line should be fine!
-		// otherwise someone could flood our ram (ntlm_auth)
 		char answer[300];
 		answer[0] = 0;
 
 		while( fgets( answer, sizeof( answer )-1, in ) )
 		{
 			// Copy Paste from Samba source4/utils/ntlm_auth.c 
-			/* Indicates a base64 encoded structure */
+			
 			if( strncmp(answer, ".\n", sizeof(answer)-1 ) == 0 )
 			{
-				//printf("Ende der Uebertragung!\n");
 				break;
 			}
 
+			/* Indicates a base64 encoded structure */
 			char* parameter = strstr(answer, ":: ");
 			if (!parameter) {
 				parameter = strstr(answer, ": ");
 
 				if (!parameter) {
-					//DEBUG(0, ("Parameter not found!\n"));
-					//fprintf(stderr, "Error: Parameter not found!\n.\n");
 					continue;
 				}
 
@@ -407,7 +365,7 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 
 				char* newline  = strstr(parameter, "\n");
 				if( newline )
-					newline[0] = '\0'; // overwrite \n
+					newline[0] = '\0';
 			} else {
 				parameter[0] ='\0';
 				parameter++;
@@ -416,10 +374,6 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 				parameter[0] ='\0';
 				parameter++;
 
-				// inplace decode
-				// risk! -> no influence of the Decode64 code!
-				// better to make it dynamic for production ... 
-				// but decode gets smaller for sure so we could use same space ?! 
 				end = Decode64(parameter, parameter);
 				parameter[end] = '\0';
 			}
@@ -428,12 +382,12 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 			{
 				if( strcmp(parameter, "Yes") == 0 )
 				{
-					Debug("Authentifiziert!\n");
+					Debug("Authenticated!\n");
 					bAuth = true;
 				}
 				else if( strcmp(parameter, "No") == 0 )
 				{
-					Debug("Keine Authentifizierung!\n");
+					Debug("Authentication failed!\n");
 					bAuth = false;
 				}
 			}
@@ -444,7 +398,6 @@ bool SmbAuthenticate(char* name, char* password, char* domainname, char* groupna
 					BUF* Buf = StrToBin(parameter);
 					Copy(nt_pw_hash_hash, Buf->Buf, 16);
 					FreeBuf(Buf);
-					//printf("User Session Key!\n");
 				}
 			}
 
@@ -642,7 +595,7 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 		}
 		else
 		{
-			// NT authentication (Not available for non-Win32)
+			// NT authentication
 #ifdef	OS_WIN32
 			IPC_MSCHAP_V2_AUTHINFO mschap;
 			Unlock(hub->lock);
@@ -681,7 +634,7 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 
 			Lock(hub->lock);
 #else	// OS_WIN32
-			// Nothing to do other than Win32
+			// Unix / Samba Winbind
  
 			IPC_MSCHAP_V2_AUTHINFO mschap;
 			Unlock(hub->lock);
@@ -690,7 +643,7 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 			char nt_username[MAX_SIZE];
 			char nt_groupname[MAX_SIZE];
 			char nt_domainname[MAX_SIZE];
-			// sicher ist sicher :D std sagt zwar das ein Array leer ist ... 
+			
 			nt_groupname[0] = 0;
  
 			UniToStr(nt_name, sizeof(nt_name), name);
@@ -731,7 +684,7 @@ bool SamAuthUserByPlainPassword(CONNECTION *c, HUB *hub, char *username, char *p
 			}
  
 			Lock(hub->lock);
-#endif	// OS_WIN32
+#endif	// OS_WIN32 / OS_LINUX
 		}
 
 		// Memory release
