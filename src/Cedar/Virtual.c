@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -4417,6 +4432,16 @@ bool NatTransactTcp(VH *v, NAT_ENTRY *n)
 					// Successful transmission
 					ReadFifo(n->RecvFifo, NULL, sent_size);
 					n->SendAckNext = true;
+
+					if (false)
+					{
+						IP ip;
+
+						n->test_TotalSent += sent_size;
+
+						UINTToIP(&ip, n->DestIp);
+						Debug("TCP %u: %r:%u %u\n", n->Id, &ip, n->DestPort, (UINT)n->test_TotalSent);
+					}
 				}
 			}
 
@@ -4445,6 +4470,11 @@ bool NatTransactTcp(VH *v, NAT_ENTRY *n)
 					// Communication has been disconnected
 					n->TcpFinished = true;
 					v->NatDoCancelFlag = true;
+					if (n->TcpDisconnected == false)
+					{
+						Disconnect(n->Sock);
+						n->TcpDisconnected = true;
+					}
 					break;
 				}
 				else if (recv_size == SOCK_LATER)
@@ -4720,7 +4750,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 
 	case NAT_TCP_SEND_RESET:		// Reset the connection
 		// Send a RST
-		if (n->TcpFinished == false)
+		if (n->TcpFinished == false || n->TcpForceReset)
 		{
 			SendTcp(v, n->DestIp, n->DestPort, n->SrcIp, n->SrcPort,
 				(UINT)(n->SendSeq + n->SendSeqInit),
@@ -4742,6 +4772,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 					TCP_ACK | TCP_FIN, 0,
 					0, NULL, 0);
 				n->FinSentTime = v->Now;
+				n->FinSentSeq = (UINT)(n->SendSeq + n->SendSeqInit);
 				n->FinSentCount++;
 				if (n->FinSentCount >= NAT_FIN_SEND_MAX_COUNT)
 				{
@@ -4959,6 +4990,16 @@ void TcpRecvForInternet(VH *v, UINT src_ip, UINT src_port, UINT dest_ip, UINT de
 	switch (n->TcpStatus)
 	{
 	case NAT_TCP_SEND_RESET:		// Disconnect the connection by sending a RST
+		if ((tcp->Flag & TCP_ACK) && ((tcp->Flag & TCP_SYN) == false))
+		{
+			if (n->FinSentCount >= 1)
+			{
+				if (ack == (n->FinSentSeq + 1))
+				{
+					n->TcpForceReset = true;
+				}
+			}
+		}
 		break;
 
 	case NAT_TCP_CONNECTED:			// Socket connection completion: SYN + ACK, ACK processing
@@ -9436,6 +9477,53 @@ void VirtualDhcpServer(VH *v, PKT *p)
 				if (GetGlobalServerFlag(GSF_DISABLE_PUSH_ROUTE) == 0)
 				{
 					Copy(&ret.ClasslessRoute, &v->PushRoute, sizeof(DHCP_CLASSLESS_ROUTE_TABLE));
+
+					if (IsIpcMacAddress(p->MacAddressSrc))
+					{
+						if (ret.Gateway == 0)
+						{
+							// If the default gateway is not specified, add the static routing table
+							// entry for the local IP subnet
+							// (for PPP clients)
+							IP dhcp_ip;
+							IP dhcp_mask;
+							IP dhcp_network;
+
+							UINTToIP(&dhcp_ip, ip);
+
+							if (ip == 0)
+							{
+								UINTToIP(&dhcp_ip, p->L3.IPv4Header->SrcIP);
+							}
+
+							UINTToIP(&dhcp_mask, v->DhcpMask);
+
+							IPAnd4(&dhcp_network, &dhcp_ip, &dhcp_mask);
+
+							if (GetBestClasslessRoute(&ret.ClasslessRoute, &dhcp_ip) == NULL)
+							{
+								if (ret.ClasslessRoute.NumExistingRoutes < MAX_DHCP_CLASSLESS_ROUTE_ENTRIES)
+								{
+									DHCP_CLASSLESS_ROUTE *cr = &ret.ClasslessRoute.Entries[ret.ClasslessRoute.NumExistingRoutes];
+
+									cr->Exists = true;
+
+									UINTToIP(&cr->Gateway, v->HostIP);
+
+									if (v->UseNat == false && ret.ClasslessRoute.NumExistingRoutes >= 1)
+									{
+										Copy(&cr->Gateway, &ret.ClasslessRoute.Entries[0].Gateway, sizeof(IP));
+									}
+
+									Copy(&cr->Network, &dhcp_network, sizeof(IP));
+									Copy(&cr->SubnetMask, &dhcp_mask, sizeof(IP));
+									cr->SubnetMaskLen = SubnetMaskToInt(&dhcp_mask);
+
+									ret.ClasslessRoute.NumExistingRoutes++;
+								}
+							}
+						}
+					}
 				}
 
 				if (opt->Opcode != DHCP_INFORM)

@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -16929,6 +16944,13 @@ void SmSslDlgOnOk(HWND hWnd, SM_SSL *s)
 		{
 			return;
 		}
+
+		if (t.Flag1 == 0)
+		{
+			// Show the warning message
+			MsgBox(hWnd, MB_ICONWARNING, _UU("SM_CERT_NEED_ROOT"));
+		}
+
 		FreeRpcKeyPair(&t);
 
 		MsgBox(hWnd, MB_ICONINFORMATION, _UU("CM_CERT_SET_MSG"));
@@ -18930,6 +18952,8 @@ UINT SmServerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *pa
 
 			SmShowIPSecMessageIfNecessary(hWnd, p);
 
+			SmShowCertRegenerateMessageIfNecessary(hWnd, p);
+
 			SetTimer(hWnd, 3, 150, NULL);
 			break;
 
@@ -18952,6 +18976,73 @@ UINT SmServerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *pa
 	LvStandardHandler(hWnd, msg, wParam, lParam, L_HUB);
 
 	return 0;
+}
+
+// Display the message about the cert
+void SmShowCertRegenerateMessageIfNecessary(HWND hWnd, SM_SERVER *p)
+{
+	// Validate arguments
+	if (p == NULL)
+	{
+		return;
+	}
+
+	if (p->ServerAdminMode && p->Bridge == false)
+	{
+		RPC_KEY_PAIR t;
+
+		Zero(&t, sizeof(t));
+
+		if (ScGetServerCert(p->Rpc, &t) == ERR_NO_ERROR)
+		{
+			if (t.Cert != NULL && t.Cert->has_basic_constraints == false)
+			{
+				if (t.Cert->root_cert)
+				{
+					if (MsRegReadInt(REG_CURRENT_USER, SM_HIDE_CERT_UPDATE_MSG_KEY, p->ServerName) == 0)
+					{
+						if (MsgBox(hWnd, MB_ICONQUESTION | MB_YESNO, _UU("SM_CERT_MESSAGE")) == IDYES)
+						{
+							X *x;
+							K *k;
+
+							// Regenerating the certificate
+							if (SmRegenerateServerCert(hWnd, p, NULL, &x, &k, false))
+							{
+								// Confirmation message
+								if (MsgBox(hWnd, MB_ICONEXCLAMATION | MB_YESNO, _UU("SM_REGENERATE_CERT_MSG")) == IDYES)
+								{
+									// Set the new certificate and private key
+									RPC_KEY_PAIR t2;
+
+									Zero(&t2, sizeof(t2));
+
+									t2.Cert = CloneX(x);
+									t2.Key = CloneK(k);
+
+									if (CALL(hWnd, ScSetServerCert(p->Rpc, &t2)))
+									{
+										FreeRpcKeyPair(&t2);
+
+										MsgBox(hWnd, MB_ICONINFORMATION, _UU("CM_CERT_SET_MSG"));
+									}
+								}
+
+								FreeX(x);
+								FreeK(k);
+							}
+						}
+						else
+						{
+							MsRegWriteInt(REG_CURRENT_USER, SM_HIDE_CERT_UPDATE_MSG_KEY, p->ServerName, 1);
+						}
+					}
+				}
+			}
+
+			FreeRpcKeyPair(&t);
+		}
+	}
 }
 
 // Display messages about IPsec, and prompt for the setting
@@ -19004,13 +19095,6 @@ void SmConnectEx(HWND hWnd, SETTING *s, bool is_in_client)
 	if (s == NULL)
 	{
 		return;
-	}
-
-	// Updater terminate
-	if (sm->Update != NULL)
-	{
-		FreeUpdateUi(sm->Update);
-		sm->Update = NULL;
 	}
 
 	// Disable the control
@@ -19224,7 +19308,7 @@ ENTER_PASSWORD:
 							family_name, p.ServerName);
 
 						update = InitUpdateUi(update_software_title, update_software_name, family_name, p.ServerInfo.ServerBuildDate,
-							p.ServerInfo.ServerBuildInt, p.ServerInfo.ServerVerInt, NULL);
+							p.ServerInfo.ServerBuildInt, p.ServerInfo.ServerVerInt, NULL, false);
 					}
 				}
 
@@ -20165,7 +20249,7 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 
 		// Updater start
 		sm->Update = InitUpdateUi(_UU("PRODUCT_NAME_VPN_SMGR"), NAME_OF_VPN_SERVER_MANAGER, NULL, GetCurrentBuildDate(),
-			CEDAR_BUILD, CEDAR_VER, NULL);
+			CEDAR_BUILD, CEDAR_VER, NULL, false);
 		break;
 
 	case WM_TIMER:
@@ -20181,6 +20265,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 		switch (wParam)
 		{
 		case IDOK:
+			DisableUpdateUi(sm->Update);
+
 			// Connection
 			i = LvGetSelected(hWnd, L_SETTING);
 			if (i != INFINITE)
@@ -20210,6 +20296,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_NEW_SETTING:
+			DisableUpdateUi(sm->Update);
+
 			// Add
 			if (SmAddSettingDlg(hWnd, new_name, sizeof(new_name)))
 			{
@@ -20218,6 +20306,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_EDIT_SETTING:
+			DisableUpdateUi(sm->Update);
+
 			// Edit
 			if (SmEditSettingDlg(hWnd))
 			{
@@ -20228,6 +20318,8 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_DELETE:
+			DisableUpdateUi(sm->Update);
+
 			// Delete
 			i = LvGetSelected(hWnd, L_SETTING);
 			if (i != INFINITE)
@@ -20253,16 +20345,22 @@ UINT SmMainDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *para
 			break;
 
 		case B_SECURE_MANAGER:
+			DisableUpdateUi(sm->Update);
+
 			// Smart Card Manager
 			SmSecureManager(hWnd);
 			break;
 
 		case B_SELECT_SECURE:
+			DisableUpdateUi(sm->Update);
+
 			// Smart card selection
 			SmSelectSecureId(hWnd);
 			break;
 
 		case B_CERT_TOOL:
+			DisableUpdateUi(sm->Update);
+
 			// Certificate Creation Tool
 			SmCreateCert(hWnd, NULL, NULL, false, NULL, false);
 			break;

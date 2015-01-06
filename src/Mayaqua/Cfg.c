@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -244,8 +259,26 @@ CFG_RW *NewCfgRwEx(FOLDER **root, char *cfg_name, bool dont_backup)
 }
 CFG_RW *NewCfgRwExW(FOLDER **root, wchar_t *cfg_name, bool dont_backup)
 {
+	return NewCfgRwEx2W(root, cfg_name, dont_backup, NULL);
+}
+CFG_RW *NewCfgRwEx2A(FOLDER **root, char *cfg_name_a, bool dont_backup, char *template_name_a)
+{
+	CFG_RW *ret;
+	wchar_t *cfg_name_w = CopyStrToUni(cfg_name_a);
+	wchar_t *template_name_w = CopyStrToUni(template_name_a);
+
+	ret = NewCfgRwEx2W(root, cfg_name_w, dont_backup, template_name_w);
+
+	Free(cfg_name_w);
+	Free(template_name_w);
+
+	return ret;
+}
+CFG_RW *NewCfgRwEx2W(FOLDER **root, wchar_t *cfg_name, bool dont_backup, wchar_t *template_name)
+{
 	CFG_RW *rw;
 	FOLDER *f;
+	bool loaded_from_template = false;
 	// Validate arguments
 	if (cfg_name == NULL || root == NULL)
 	{
@@ -255,6 +288,18 @@ CFG_RW *NewCfgRwExW(FOLDER **root, wchar_t *cfg_name, bool dont_backup)
 	f = CfgReadW(cfg_name);
 	if (f == NULL)
 	{
+		// Load from template
+		if (UniIsEmptyStr(template_name) == false)
+		{
+			f = CfgReadW(template_name);
+			if (f != NULL)
+			{
+				loaded_from_template = true;
+
+				goto LABEL_CONTIUNE;
+			}
+		}
+
 		rw = ZeroMalloc(sizeof(CFG_RW));
 		rw->lock = NewLock();
 		rw->FileNameW = CopyUniStr(cfg_name);
@@ -266,10 +311,18 @@ CFG_RW *NewCfgRwExW(FOLDER **root, wchar_t *cfg_name, bool dont_backup)
 		return rw;
 	}
 
+LABEL_CONTIUNE:
 	rw = ZeroMalloc(sizeof(CFG_RW));
 	rw->FileNameW = CopyUniStr(cfg_name);
 	rw->FileName = CopyUniToStr(cfg_name);
-	rw->Io = FileOpenW(cfg_name, false);
+	if (loaded_from_template == false)
+	{
+		rw->Io = FileOpenW(cfg_name, false);
+	}
+	else
+	{
+		rw->Io = FileCreateW(cfg_name);
+	}
 	rw->lock = NewLock();
 
 	*root = f;

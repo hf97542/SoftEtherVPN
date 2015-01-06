@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -171,8 +186,6 @@ namespace BuildUtil
 			Win32BuildUtil.ExecCommand(Env.ExeFileName, string.Format("/CMD:CopyRelease"));
 
 #if !BU_SOFTETHER
-			Win32BuildUtil.ExecCommand(Env.ExeFileName, string.Format("/CMD:MakeOpenSource"));
-
 			Win32BuildUtil.ExecCommand(Env.ExeFileName, string.Format("/CMD:MakeSoftEtherDir"));
 
 			if (vl["SEVPN"].BoolValue)
@@ -180,6 +193,8 @@ namespace BuildUtil
 				// Build SEVPN
 				Win32BuildUtil.ExecCommand(Paths.CmdFileName, string.Format("/C \"{0}\"", Path.Combine(Paths.SoftEtherBuildDir, @"Main\BuildAll.cmd")));
 			}
+
+			Win32BuildUtil.ExecCommand(Env.ExeFileName, string.Format("/CMD:MakeOpenSource"));
 #endif
 
 			DateTime end = Time.NowDateTime;
@@ -349,6 +364,8 @@ namespace BuildUtil
 
 				tmp = Str.ReplaceStr(tmp, "\\\\", "\\");
 
+				tmp = Str.ReplaceStr(tmp, " ", "_");
+
 				w.WriteLine("mkdir \"{1}\\{0}\"", Path.GetDirectoryName(tmp), cddir);
 				w.WriteLine("copy /b /y \"{2}\\{0}\" \"{3}\\{1}\"", IO.GetRelativeFileName(file, filesReleaseDir), tmp, baseName, cddir);
 				w.WriteLine();
@@ -494,7 +511,7 @@ namespace BuildUtil
 			txt.WriteLine();
 
 			string src_bindir = Path.Combine(Paths.BaseDirName, "bin");
-			string vpnsmgr_zip_filename_relative = @"Windows\Admin Tools\VPN Server Manager and Command-line Utility Package\";
+			string vpnsmgr_zip_filename_relative = @"Windows\Admin_Tools\VPN_Server_Manager_and_Command-line_Utility_Package\";
 			vpnsmgr_zip_filename_relative += 
 #if BU_SOFTETHER
 				"softether-" + 

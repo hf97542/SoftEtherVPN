@@ -555,6 +555,9 @@ HUB_AO_MaxLoggedPacketsPerMinute			Maximum number of logging target packets per 
 HUB_AO_DoNotSaveHeavySecurityLogs			Do not take heavy security log.
 HUB_AO_DropBroadcastsInPrivacyFilterMode	Drop broadcasting packets if the both source and destination session is PrivacyFilter mode.
 HUB_AO_DropArpInPrivacyFilterMode			Drop ARP packets if the both source and destination session is PrivacyFilter mode.
+HUB_AO_SuppressClientUpdateNotification		Suppress the update notification screen on the VPN Client.
+HUB_AO_FloodingSendQueueBufferQuota			Specify the quota limitation value (in bytes) of the sending queue buffer size which the flooding operation on the Virtual Hub can consume. The quota value is applied on the total length of sending queues of all active VPN sessions. Specify '0' to disable the quota. This option is effective to solve the out-of-memory problem on the network where there are many flooding packets.
+HUB_AO_AssignVLanIdByRadiusAttribute		Enable the VLAN ID dynamic assignment function. Each VPN session will be assigned its own VLAN ID by the RADIUS attribute value when the user is authenticated by the external RADIUS server unless the user object has a VLAN ID security policy. The RADIUS attribute with the name "Tunnel-Pvt-Group-ID" (ID = 81) will be used as the VLAN ID. The data type must be STRING.
 
 
 #关于失败连接对话框
@@ -1071,14 +1074,15 @@ SVC_HIDE_TRAY_MSG			启动 %S 用户模式时将隐藏任务栏图标。\r\n从�
 
 
 #关于服务 (UNIX)
-UNIX_SVC_HELP				%S Service Program\nCopyright (c) SoftEther VPN Project. All Rights Reserved.\n\n%S Command Usage:\n %S start  - Start %S Service.\n %S stop   - Stop %S Service if the service is already started.\n\n
-UNIX_SVC_STARTED			%S Service Started.\n
-UNIX_SVC_STOPPING			Stopping %S Service...\n
-UNIX_SVC_STOPPED			%S Service Stopped.\n
-UNIX_SVC_STOP_FAILED		%S Service Stop Failed.\n
-UNIX_SVC_ALREADY_START		%S Service is already started.\nExecute "%S stop" to stop this service.\n
-UNIX_SVC_NOT_STARTED		%S Service is not yet started.\nExecute "%S start" to start this service.\n
-UNIX_SVC_ERROR_FORK			Failed to create child process for %S Service.\n
+UNIX_SVC_HELP			%S service program\nCopyright (c) SoftEther VPN Project. All Rights Reserved.\n\n%S command usage:\n %S start  - Start the %S service.\n %S stop   - Stop the %S service if the service has been already started.\n\n
+UNIX_SVC_STARTED		The %S service has been started.\n
+UNIX_SVC_STOPPING		Stopping the %S service ...\n
+UNIX_SVC_STOPPED		%S service has been stopped.\n
+UNIX_SVC_STOP_FAILED	Stopping %S service was failed.\n
+UNIX_SVC_ALREADY_START	%S service has been already started.\nRun the "%S stop" command to stop this service.\n
+UNIX_SVC_NOT_STARTED	%S service has not yet been started.\nRun the "%S start" to start this service.\n
+UNIX_SVC_ERROR_FORK		Failed to create child process for the %S service.\n
+UNIX_SVC_NONROOT		\nWarning: The current user context is non-root. It is recommended to run the VPN service by the root user. Although the VPN service may run under non-root users, some privilege-required functions (e.g. the local bridge function) need the root privilege.\n
 
 
 # 服务定义 (SoftEther VPN Client)
@@ -1219,7 +1223,7 @@ CM_LISTENER_ERROR			错误
 CM_DELETE_LISTENER_MSG		监听器 (TCP 端口 %u) 将删除。从现在起，将无法连接到该端口。\r\n你确定要这样做吗?
 CM_STOP_LISTENER_MSG		监听器 (TCP 端口 %u) 将停止。监听器将无法连接到该端口直到重新启动静听器。\r\n\r\n你确定吗?
 CM_CLOSE_BUTTON				关闭
-CM_CERT_SET_MSG				设置了新的服务器证书。
+CM_CERT_SET_MSG				设置了新的服务器证书。\r\n\r\nIf you are using OpenVPN protocols, please mind that you may have to update the inline certificate data in the OpenVPN configuration file.
 CM_SHORTCUT_DISCONNECT		已经连接到指定的目标。 \r\n\r\n你想断开吗?
 
 
@@ -1285,9 +1289,9 @@ SM_CONN_DISCONNECT_MSG		连接 %s 将断开。\r\n你确定要这么做吗?
 SM_CONNINFO_CAPTION			连接 %s 的信息
 SM_CONNINFO_NAME			连接名称
 SM_CONNINFO_TYPE			连接类型
-SM_CONNINFO_HOSTNAME		源主机名称
-SM_CONNINFO_IP				源 IP 地址
-SM_CONNINFO_PORT			源端口号 (TCP)
+SM_CONNINFO_HOSTNAME		客户端主机名称
+SM_CONNINFO_IP				客户端 IP 地址
+SM_CONNINFO_PORT			客户端口号 (TCP)
 SM_CONNINFO_TIME			连接开始
 SM_CONNINFO_SERVER_STR		服务端产品名
 SM_CONNINFO_SERVER_VER		服务端版本
@@ -1451,8 +1455,8 @@ SM_SESS_STATUS_CAPTION		"%S" VPN 会话的状态
 SM_SESS_STATUS_USERNAME		用户名 (认证)
 SM_SESS_STATUS_REALUSER		用户名 (数据库)
 SM_SESS_STATUS_GROUPNAME	用户組名
-SM_CLIENT_IP				源 IP 地址
-SM_CLIENT_HOSTNAME			源主机名称
+SM_CLIENT_IP				客户端 IP 地址
+SM_CLIENT_HOSTNAME			客户端名称
 SM_NODE_CLIENT_NAME			客户端产品名称
 SM_NODE_CLIENT_VER			客户端版本
 SM_NODE_CLIENT_BUILD		客户端内部标号
@@ -1659,6 +1663,10 @@ SM_FACTORY_DEFAULT_PERFORMED		在服务器上正在执行出厂复位操作。\r
 SM_AZURE_STATUS_CONNECTED		状态: 已连接
 SM_AZURE_STATUS_NOT_CONNECTED	状态: 没有连接
 SM_NO_BRIDGE_NICS				无物理网络适配器、适合本地桥在 VPN 服务器计算机上被发现。\r\n为了创建一个本地桥，你必须在计算机上至少安装一个物理网络适配器。\r\n您不能为本地桥使用 Wi-Fi 适配器或 3G 适配器。\r\n请安装一个兼容有线以太网的物理网络适配器。\r\n\r\n如果最近安装的网络适配器没有出现，重新启动计算机。\r\n\r\n如果本地桥无论如何不能使用，你可以使用“SecureNAT 功能”代替。\r\n\r\n如果你有一定的原因使用不同寻常的网络适配器（即 Wi-Fi 网络连接适配器，3G 适配器或虚拟适配器），设置“ShowAllInterfaces”变量在“LocalBridgeList”指令为“true”，然后重启VPN服务器。然后，这些设备将出现在名单上。（仅限于高级 Windows 用户）。
+SM_CERT_MESSAGE					The current SSL self-signed root certificate on this VPN Server is in the old format.\r\n\r\nSome versions of OpenVPN Connect for Android have a bug to misinterpret SSL certificates in the old format. It might cause the connection problem from OpenVPN Connect for Android to this VPN Server.\r\n\r\nIf you are planning to use OpenVPN Connect for Android as a VPN client, it is recommended to regenerate the SSL server certificate.\r\n\r\nDo you want to regenerate the server certificate now?
+SM_CERT_MESSAGE_CLI				--- Caution ---\r\n\r\nThe current SSL self-signed root certificate on this VPN Server is in the old format.\r\n\r\nSome versions of OpenVPN Connect for Android have a bug to misinterpret SSL certificates in the old format. It might cause the connection problem from OpenVPN Connect for Android to this VPN Server.\r\n\r\nIf you are planning to use OpenVPN Connect for Android as a VPN client, it is recommended to regenerate the SSL server certificate.\r\n\r\nTo regenerate and update the server certificate, execute the "ServerCertRegenerate" command after updating the VPN Server to the latest version.
+SM_CERT_NEED_ROOT				The specified SSL certificate is a sub-certificate which was issued by a CA (Certificate Authority).\r\n\r\nIf you are planning to support either Microsoft SSTP or OpenVPN protocol on this VPN server, you have to install the root certificate and all intermediate certificates (if exists) on this VPN Server.\r\n\r\nTo install these certificates, copy the root certificate and all intermediate certificate files (in the X.509 format) into the "chain_certs" subdirectory on the directory which is VPN Server has been installed on.\r\n\r\nIf you don't know how to obtain root and intermediate certificate files for your certificate authority (CA), please refer to the CA's web site or contact technical support staffs of the CA.
+
 
 #关于 User-mode 路由器管理工具
 NM_TITLE					删除
@@ -1912,6 +1920,7 @@ LH_MAX_SESSION_2			连接 "%S": 可被 VPN Server 管理的的最大会话数 (%
 LH_NEW_SESSION				连接 "%S": 已创建新会话 "%S"。(IP 地址：%S，端口号：%u，物理底层协议："%S")
 LH_SET_SESSION				会话 "%S": 已设置参数。最大 TCP 连接数：%u，使用的加密：%s，使用的压缩：%s，使用的半双工通信：%s，超时：%u 秒。
 LH_NODE_INFO				会话 "%S": VPN Client 详细信息: (%s)
+LH_VLAN_ID					会话 "%S": Assigned VLAN ID: %u
 LH_INVALID_SIGNATURE		会话 "%S": 已连接的客户端发送了非法协议数据。无法与客户端建立一般通信。请首先检查客户端到服务端之间的连接和网络线缆问题，然后再检查是否安装有特殊传输数据包重写设备。
 LH_END_SESSION				会话 "%S": 会话已结束。统计信息如下: 总输出数据大小: %I64u 字节，总输入数据大小: %I64u 字节。
 LH_BCAST_STORM				会话 "%S": 检测到大量广播数据包。您可能会按照策略废弃数据包。源 MAC 地址是 %S，源 IP 地址是 %S，目标 IP 地址是 %S。广播数据包量大于等于 %u 每秒 (注意此信息是对部分数据包进行刻板的分析，结果可能不正确)。
@@ -4305,7 +4314,7 @@ CMD_UNKNOWN_PARAM			没有这个参数的说明。
 
 # 控制台系统内使用的字符串
 CMD_HELP_1					您可以使用下面的 %u 命令:
-CMD_HELP_2					参考每个命令的使用，输入 "命令名称 /?" 来查看帮助。
+CMD_HELP_2					参考每个命令的使用，输入 "命令名称 ?" 来查看帮助。
 CMD_EVAL_MIN_MAX			您必须指定从 %u 到 %u 的整数。
 CMD_PROMPT					输入一个值: 
 CMD_EVAL_NOT_EMPTY			规格不能为空白。
@@ -6792,7 +6801,7 @@ CMD_RemoteDisable_Args		RemoteDisable
 
 
 # MakeCert 命令
-CMD_MakeCert				创建新的 X.509 证书和密钥
+CMD_MakeCert				创建新的 X.509 证书和密钥 (1024 位)
 CMD_MakeCert_Help			创建新的 X.509 证书和密钥，将其保存为一个文件。\n证书公共密钥和秘密密钥的生成算法使用 RSA 1024 位。\n作为证书类型，可以创建由根证书 (自签名证书) 和其他证书签名的某个证书。要创建由其他证书签名的证书，需要与用于签名的证书 (X.509格式文件) 相对应的密钥文件 (Base 64 编码)。\n\n创建的证书可以指定名称 (CN)，所属机构 (O)，组织单位 (OU)，国家 (C)，州 (ST)，当地 (L)，序列号，有效期限。\n创建的证书以 X.509 格式的文件，密钥文件以 RSA 1024 位的 Base 64 编码文件，被分别保存。\n\nMakeCert 指令是一个工具，它提供创建证书所需的最低功能。如果想创建一个真正的证书，建议使用 OpenSSL 等免费软件和出售的 CA (认证机构) 软件。\n\n※注意: 此指令可以从 SoftEther VPN 命令行管理工具调用。虽然目前以管理模式连接到 VPN Server 和 VPN Client 时可以运行，但要实际运行 RSA 演算，生成证书数据的，是运行此指令的计算机，和以管理模式连接的链接目标计算机没有任何关系。
 CMD_MakeCert_Args			MakeCert [/CN:cn] [/O:o] [/OU:ou] [/C:c] [/ST:st] [/L:l] [/SERIAL:serial] [/EXPIRES:expires] [/SIGNCERT:signcert] [/SIGNKEY:signkey] [/SAVECERT:savecert] [/SAVEKEY:savekey]
 CMD_MakeCert_CN				指定创建证书的名称 (CN) 项目。还可以指定 none。
@@ -6822,6 +6831,24 @@ CMD_MakeCert_ERROR_SIGNKEY	无法读取以 /SIGNCERT 和 /SIGNKEY 指定的证�
 CMD_MakeCert_ERROR_GEN_FAILED	无法生成证书和私钥。
 
 
+# MakeCert2048 命令
+CMD_MakeCert2048				创建新的 X.509 证书和密钥 (2048 位)
+CMD_MakeCert2048_Help			创建新的 X.509 证书和密钥，将其保存为一个文件。\n证书公共密钥和秘密密钥的生成算法使用 RSA 1024 位。\n作为证书类型，可以创建由根证书 (自签名证书) 和其他证书签名的某个证书。要创建由其他证书签名的证书，需要与用于签名的证书 (X.509 格式文件) 相对应的密钥文件 (Base 64 编码)。\n\n创建的证书可以指定名称 (CN)，所属机构 (O)，组织单位 (OU)，国家 (C)，州 (ST)，当地 (L)，序列号，有效期限。\n创建的证书以 X.509 格式的文件，密钥文件以 RSA 2048 位的 Base 64 编码文件，被分别保存。\n\nMakeCert 指令是一个工具，它提供创建证书所需的最低功能。如果想创建一个真正的证书，建议使用 OpenSSL 等免费软件和出售的 CA (认证机构) 软件。\n\n※注意: 此指令可以从 SoftEther VPN 命令行管理工具调用。虽然目前以管理模式连接到 VPN Server 和 VPN Client 时可以运行，但要实际运行 RSA 演算，生成证书数据的，是运行此指令的计算机，和以管理模式连接的链接目标计算机没有任何关系。
+CMD_MakeCert2048_Args			MakeCert2048 [/CN:cn] [/O:o] [/OU:ou] [/C:c] [/ST:st] [/L:l] [/SERIAL:serial] [/EXPIRES:expires] [/SIGNCERT:signcert] [/SIGNKEY:signkey] [/SAVECERT:savecert] [/SAVEKEY:savekey]
+CMD_MakeCert2048_CN				指定创建证书的名称 (CN) 项目。还可以指定 none。
+CMD_MakeCert2048_O				指定创建证书的所属机构 (O) 项目。还可以指定 none。
+CMD_MakeCert2048_OU				指定创建证书的组织单位 (OU) 项目。还可以指定 none。
+CMD_MakeCert2048_C				指定创建证书的国家 (C) 项目。还可以指定 none。
+CMD_MakeCert2048_ST				指定创建证书的州 (ST) 项目。还可以指定 none。
+CMD_MakeCert2048_L				指定创建证书的当地 (L) 项目。还可以指定 none。
+CMD_MakeCert2048_SERIAL			指定创建证书的序列号项目。以 16 进制指定。还可以指定 none。
+CMD_MakeCert2048_EXPIRES		指定创建证书的有效期限。如果指定 none 或 0，将被使用 3650 天 (约 10 年)。最大可以指定 10950 天 (约 30 年)。
+CMD_MakeCert2048_SIGNCERT		根据现有的证书对要创建的证书签名时，指定用来签名的 X.509 形式的证书文件名。如果省略参数，将作为根证书而创建没有签名的新证书。
+CMD_MakeCert2048_SIGNKEY		指定与 /SIGNCERT 指定的证书相应的密钥 (RSA，Base 64 的编码)
+CMD_MakeCert2048_SAVECERT		指定文件名以保存创建的证书。该证书以包含 RSA 形式的 2048 位公开密钥的 X.509 文件格式被保存。
+CMD_MakeCert2048_SAVEKEY		指定文件名保存对应创建的证书的密钥。该密钥以 RSA 形式的 2048 位密钥文件被保存。
+
+
 # TrafficClient 命令
 CMD_TrafficClient			在用户模式下，运行网络流量速度测试工具
 CMD_TrafficClient_Help		运行通信吞吐量测量工具的客户端程序。\n通信吞吐量测量工具，作为 TrafficClient 和 TrafficServer 两个指令使用，可以测量在 IP 网络上连接的 2 台计算机之间可传送的通信吞吐量。在另一台计算机上使用 TrafficServer 指令使通信吞吐量测量工具服务器处于待机状态，用 TrafficClient 指令指定并连接其服务器的主机名或 IP 地址和端口号，测量通信速度。\n同时建立多个连接，计算各连接最大限度传送流数据的结果，及在指定时间内能够实际传送的数据的比特数，以此为依据计算通信吞吐量的平均值 (bps)，用此方法进行通信速度的测量。通常，用一个 TCP 连接时，由于 TCP 算法的限制，大多数时候只能用比实际的网络吞吐量慢的速度通信。因此，建议测量同时建立多个 TCP 连接进行通信的结果。用此方法测量的吞吐量，以实际上作为 TCP 流到达接收方的数据的比特长度来计算，因此途中产生的数据包丢失和数据包损坏不包括在实际到达的数据包中，因而能够计算出纯粹的网络最大通信带宽的近似值。\n用作为测量结构的，在 TCP 内被传输的 TCP 流的大小，来计算在网络上实际传输的数据量的近似值，将其除以时间，计算出比特每秒 (bps)。假定计算的物理网络类型为以太网 (IEEE802.3) ,MAC 帧有效载荷的大小是 1,500 比特 (TCP 的 MSS 是 1,460 比特)。如果指定 /RAW 选项，不会对 TCP/IP 头和 MAC 头的数据量进行更正计算。\n\n※注意: 此指令可以从 SoftEther VPN 命令行管理工具调用。虽然目前以管理模式连接到 VPN Server 和 VPN Client 时可以运行，但要实际进行通信，测量吞吐量的，是运行此指令的计算机，与以管理模式连接的连接目标计算机没有任何关系。
@@ -6840,7 +6867,7 @@ CMD_TrafficClient_ERROR_HOSTPORT	指定的主机名或端口号不正确。
 
 # TrafficServer 命令
 CMD_TrafficServer			在服务器模式下，运行网络流量速度测试工具
-CMD_TrafficServer_Help		运行通信吞吐量测量工具的服务器程序。\n通信吞吐量测量工具，作为 TrafficClient 和 TrafficServer 两个指令使用，可以测量在 IP 网络上连接的 2 台计算机之间可传送的通信吞吐量。\n要使此计算机上的 TCP 端口处于待机状态，等待从另一台计算机的 TrafficClient 连接，启动 TrafficServer 指令并指定端口号。\n关于通信吞吐量测量工具的详细情况，输入 TrafficClient /? 将显示。\n\n※注意: 此指令可以从 SoftEther VPN 命令行管理工具调用。虽然目前以管理模式连接 VPN Server 和 VPN Client 时可以运行，但要进行实际通信并测量吞吐量的，是运行此指令的计算机，与用管理模式连接终端的计算机没有任何关系。
+CMD_TrafficServer_Help		运行通信吞吐量测量工具的服务器程序。\n通信吞吐量测量工具，作为 TrafficClient 和 TrafficServer 两个指令使用，可以测量在 IP 网络上连接的 2 台计算机之间可传送的通信吞吐量。\n要使此计算机上的 TCP 端口处于待机状态，等待从另一台计算机的 TrafficClient 连接，启动 TrafficServer 指令并指定端口号。\n关于通信吞吐量测量工具的详细情况，输入 "TrafficClient ?" 将显示。\n\n※注意: 此指令可以从 SoftEther VPN 命令行管理工具调用。虽然目前以管理模式连接 VPN Server 和 VPN Client 时可以运行，但要进行实际通信并测量吞吐量的，是运行此指令的计算机，与用管理模式连接终端的计算机没有任何关系。
 CMD_TrafficServer_Args	TrafficServer [port]
 CMD_TrafficServer_[port]	以整数指定等待连接的端口号。被指定的端口，如果已经由另一个程序在使用，或不能打开该端口时，将发生错误。
 

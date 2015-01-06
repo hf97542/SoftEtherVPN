@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -1813,12 +1828,13 @@ PKT *ParsePacketEx4(UCHAR *buf, UINT size, bool no_l3, UINT vlan_type_id, bool b
 	if (no_http == false)
 	{
 		USHORT port_raw = Endian16(80);
+		USHORT port_raw2 = Endian16(8080);
 
 		// Analyze if the packet is a part of HTTP
 		if ((p->TypeL3 == L3_IPV4 || p->TypeL3 == L3_IPV6) && p->TypeL4 == L4_TCP)
 		{
 			TCP_HEADER *tcp = p->L4.TCPHeader;
-			if (tcp->DstPort == port_raw)
+			if (tcp->DstPort == port_raw || tcp->DstPort == port_raw2)
 			{
 				if (tcp != NULL && (!((tcp->Flag & TCP_SYN) || (tcp->Flag & TCP_RST) || (tcp->Flag & TCP_FIN))))
 				{
@@ -2167,7 +2183,7 @@ bool ParsePacketL2Ex(PKT *p, UCHAR *buf, UINT size, bool no_l3)
 			b2 = false;
 		}
 	}
-	if (b1 || b2 || (Cmp(p->MacHeader->SrcAddress, p->MacHeader->DestAddress, 6) == 0))
+	if (b1 || b2 || (memcmp(p->MacHeader->SrcAddress, p->MacHeader->DestAddress, 6) == 0))
 	{
 		p->InvalidSourcePacket = true;
 	}
@@ -3288,11 +3304,44 @@ BUF *BuildDhcpOptionsBuf(LIST *o)
 	for (i = 0;i < LIST_NUM(o);i++)
 	{
 		DHCP_OPTION *d = LIST_DATA(o, i);
+		UINT current_size = d->Size;
+		UINT current_pos = 0;
+
 		id = (UCHAR)d->Id;
-		sz = (UCHAR)d->Size;
+		if (d->Size <= 255)
+		{
+			sz = (UCHAR)d->Size;
+		}
+		else
+		{
+			sz = 0xFF;
+		}
 		WriteBuf(b, &id, 1);
 		WriteBuf(b, &sz, 1);
-		WriteBuf(b, d->Data, d->Size);
+		WriteBuf(b, d->Data, sz);
+
+		current_size -= sz;
+		current_pos += sz;
+
+		while (current_size != 0)
+		{
+			id = DHCP_ID_PRIVATE;
+			if (current_size <= 255)
+			{
+				sz = (UCHAR)current_size;
+			}
+			else
+			{
+				sz = 0xFF;
+			}
+			WriteBuf(b, &id, 1);
+			WriteBuf(b, &sz, 1);
+			WriteBuf(b, ((UCHAR *)d->Data) + current_pos, sz);
+
+			current_size -= sz;
+			current_pos += sz;
+		}
+
 	}
 
 	id = 0xff;
@@ -3739,27 +3788,24 @@ BUF *DhcpBuildClasslessRouteData(DHCP_CLASSLESS_ROUTE_TABLE *t)
 
 		if (r->Exists && r->SubnetMaskLen <= 32)
 		{
-			if (b->Size <= (255 - 9))
-			{
-				UCHAR c;
-				UINT data_len;
-				UINT ip32;
-				UCHAR tmp[4];
+			UCHAR c;
+			UINT data_len;
+			UINT ip32;
+			UCHAR tmp[4];
 
-				// Width of subnet mask
-				c = (UCHAR)r->SubnetMaskLen;
-				WriteBuf(b, &c, 1);
+			// Width of subnet mask
+			c = (UCHAR)r->SubnetMaskLen;
+			WriteBuf(b, &c, 1);
 
-				// Number of significant octets
-				data_len = (r->SubnetMaskLen + 7) / 8;
-				Zero(tmp, sizeof(tmp));
-				Copy(tmp, &r->Network, data_len);
-				WriteBuf(b, tmp, data_len);
+			// Number of significant octets
+			data_len = (r->SubnetMaskLen + 7) / 8;
+			Zero(tmp, sizeof(tmp));
+			Copy(tmp, &r->Network, data_len);
+			WriteBuf(b, tmp, data_len);
 
-				// Gateway
-				ip32 = IPToUINT(&r->Gateway);
-				WriteBuf(b, &ip32, sizeof(UINT));
-			}
+			// Gateway
+			ip32 = IPToUINT(&r->Gateway);
+			WriteBuf(b, &ip32, sizeof(UINT));
 		}
 	}
 
@@ -3949,6 +3995,7 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 {
 	BUF *b;
 	LIST *o;
+	DHCP_OPTION *last_opt;
 	// Validate arguments
 	if (data == NULL)
 	{
@@ -3960,6 +4007,8 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 	SeekBuf(b, 0, 0);
 
 	o = NewListFast(NULL);
+
+	last_opt = NULL;
 
 	while (true)
 	{
@@ -3979,12 +4028,27 @@ LIST *ParseDhcpOptions(void *data, UINT size)
 			break;
 		}
 
-		opt = ZeroMalloc(sizeof(DHCP_OPTION));
-		opt->Id = (UINT)c;
-		opt->Size = (UINT)sz;
-		opt->Data = ZeroMalloc((UINT)sz);
-		ReadBuf(b, opt->Data, sz);
-		Add(o, opt);
+		if (c == DHCP_ID_PRIVATE && last_opt != NULL)
+		{
+			UINT new_size = last_opt->Size + (UINT)sz;
+			UCHAR *new_buf = ZeroMalloc(new_size);
+			Copy(new_buf, last_opt->Data, last_opt->Size);
+			ReadBuf(b, new_buf + last_opt->Size, sz);
+			Free(last_opt->Data);
+			last_opt->Data = new_buf;
+			last_opt->Size = new_size;
+		}
+		else
+		{
+			opt = ZeroMalloc(sizeof(DHCP_OPTION));
+			opt->Id = (UINT)c;
+			opt->Size = (UINT)sz;
+			opt->Data = ZeroMalloc((UINT)sz);
+			ReadBuf(b, opt->Data, sz);
+			Add(o, opt);
+
+			last_opt = opt;
+		}
 	}
 
 	FreeBuf(b);

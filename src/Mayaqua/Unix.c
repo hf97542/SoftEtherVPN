@@ -57,10 +57,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -948,6 +963,24 @@ void *UnixNewSingleInstance(char *instance_name)
 		ret->fd = fd;
 		StrCpy(ret->FileName, sizeof(ret->FileName), name);
 		return (void *)ret;
+	}
+}
+
+// Set the high oom score
+void UnixSetHighOomScore()
+{
+	IO *o;
+	char tmp[256];
+
+	sprintf(tmp, "/proc/%u/oom_score_adj", getpid());
+
+	o = UnixFileCreate(tmp);
+	if (o != NULL)
+	{
+		char tmp[128];
+		sprintf(tmp, "%u\n", 800);
+		UnixFileWrite(o, tmp, strlen(tmp));
+		UnixFileClose(o, false);
 	}
 }
 
@@ -2124,10 +2157,24 @@ void UnixSigChldHandler(int sig)
 	signal(SIGCHLD, UnixSigChldHandler);
 }
 
+// Disable core dump
+void UnixDisableCoreDump()
+{
+#ifdef	RLIMIT_CORE
+	UnixSetResourceLimit(RLIMIT_CORE, 0);
+#endif	// RLIMIT_CORE
+}
+
 // Initialize the library for UNIX
 void UnixInit()
 {
 	UNIXIO *o;
+	UINT64 max_memory = UNIX_MAX_MEMORY;
+
+	if (UnixIs64BitRlimSupported())
+	{
+		max_memory = UNIX_MAX_MEMORY_64;
+	}
 
 	UnixInitSolarisSleep();
 
@@ -2139,11 +2186,11 @@ void UnixInit()
 	current_process_id = getpid();
 
 #ifdef	RLIMIT_CORE
-	UnixSetResourceLimit(RLIMIT_CORE, UNIX_MAX_MEMORY);
+	UnixSetResourceLimit(RLIMIT_CORE, max_memory);
 #endif	// RLIMIT_CORE
 
 #ifdef	RLIMIT_DATA
-	UnixSetResourceLimit(RLIMIT_DATA, UNIX_MAX_MEMORY);
+	UnixSetResourceLimit(RLIMIT_DATA, max_memory);
 #endif	// RLIMIT_DATA
 
 #ifdef	RLIMIT_NOFILE
@@ -2155,11 +2202,11 @@ void UnixInit()
 #endif	// RLIMIT_NOFILE
 
 #ifdef	RLIMIT_STACK
-//	UnixSetResourceLimit(RLIMIT_STACK, UNIX_MAX_MEMORY);
+//	UnixSetResourceLimit(RLIMIT_STACK, max_memory);
 #endif	// RLIMIT_STACK
 
 #ifdef	RLIMIT_RSS
-	UnixSetResourceLimit(RLIMIT_RSS, UNIX_MAX_MEMORY);
+	UnixSetResourceLimit(RLIMIT_RSS, max_memory);
 #endif	// RLIMIT_RSS
 
 #ifdef	RLIMIT_LOCKS
@@ -2167,7 +2214,7 @@ void UnixInit()
 #endif	// RLIMIT_LOCKS
 
 #ifdef	RLIMIT_MEMLOCK
-	UnixSetResourceLimit(RLIMIT_MEMLOCK, UNIX_MAX_MEMORY);
+	UnixSetResourceLimit(RLIMIT_MEMLOCK, max_memory);
 #endif	// RLIMIT_MEMLOCK
 
 #ifdef	RLIMIT_NPROC
@@ -2211,25 +2258,44 @@ void UnixFree()
 }
 
 // Adjust the upper limit of resources that may be occupied
-void UnixSetResourceLimit(UINT id, UINT value)
+void UnixSetResourceLimit(UINT id, UINT64 value)
 {
 	struct rlimit t;
-	UINT hard_limit;
+	UINT64 hard_limit;
+
+	if (UnixIs64BitRlimSupported() == false)
+	{
+		if (value > (UINT64)4294967295ULL)
+		{
+			value = (UINT64)4294967295ULL;
+		}
+	}
 
 	Zero(&t, sizeof(t));
 	getrlimit(id, &t);
 
-	hard_limit = t.rlim_max;
+	hard_limit = (UINT64)t.rlim_max;
 
 	Zero(&t, sizeof(t));
-	t.rlim_cur = MIN(value, hard_limit);
-	t.rlim_max = hard_limit;
+	t.rlim_cur = (rlim_t)MIN(value, hard_limit);
+	t.rlim_max = (rlim_t)hard_limit;
 	setrlimit(id, &t);
 
 	Zero(&t, sizeof(t));
-	t.rlim_cur = value;
-	t.rlim_max = value;
+	t.rlim_cur = (rlim_t)value;
+	t.rlim_max = (rlim_t)value;
 	setrlimit(id, &t);
+}
+
+// Is the rlim_t type 64-bit?
+bool UnixIs64BitRlimSupported()
+{
+	if (sizeof(rlim_t) >= 8)
+	{
+		return true;
+	}
+
+	return false;
 }
 
 // Generate the PID file name
@@ -2418,6 +2484,13 @@ void UnixStartService(char *name)
 		int pid;
 		// Begin to start the service
 		UniPrint(_UU("UNIX_SVC_STARTED"), svc_title);
+
+		if (UnixGetUID() != 0)
+		{
+			// Non-root warning
+			UniPrint(_UU("UNIX_SVC_NONROOT"));
+		}
+
 		FreeSingleInstance(inst);
 
 		// Create a child process

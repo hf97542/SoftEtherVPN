@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -99,6 +114,10 @@
 #ifndef	MEMORY_H
 #define	MEMORY_H
 
+// MallocFast (not implemented)
+#define	MallocFast		Malloc
+#define	ZeroMallocFast	ZeroMalloc
+
 // Memory size that can be passed to the kernel at a time
 #define	MAX_SEND_BUF_MEM_SIZE				(10 * 1024 * 1024)
 
@@ -139,7 +158,6 @@ struct FIFO
 	LOCK *lock;
 	void *p;
 	UINT pos, size, memsize;
-	UINT realloc_mem_size;
 	UINT64 total_read_size;
 	UINT64 total_write_size;
 };
@@ -199,7 +217,7 @@ struct SHARED_BUFFER
 // Macro
 #define	LIST_DATA(o, i)		(((o) != NULL) ? ((o)->p[(i)]) : NULL)
 #define	LIST_NUM(o)			(((o) != NULL) ? (o)->num_item : 0)
-
+#define	HASH_LIST_NUM(o)	(((o) != NULL) ? (o)->NumItems : 0)
 
 // Function pointer type to get a hash function
 typedef UINT (GET_HASH)(void *p);
@@ -229,6 +247,8 @@ UINT CalcHashForHashList(HASH_LIST *h, void *p);
 void **HashListToArray(HASH_LIST *h, UINT *num);
 void LockHashList(HASH_LIST *h);
 void UnlockHashList(HASH_LIST *h);
+bool IsInHashListKey(HASH_LIST *h, UINT key);
+void *HashListKeyToPointer(HASH_LIST *h, UINT key);
 
 LIST *NewCandidateList();
 void FreeCandidateList(LIST *o);
@@ -239,9 +259,7 @@ LIST *BufToCandidate(BUF *b);
 
 void *Malloc(UINT size);
 void *MallocEx(UINT size, bool zero_clear_when_free);
-void *MallocFast(UINT size);
 void *ZeroMalloc(UINT size);
-void *ZeroMallocFast(UINT size);
 void *ZeroMallocEx(UINT size, bool zero_clear_when_free);
 void *ReAlloc(void *addr, UINT size);
 void Free(void *addr);
@@ -318,6 +336,7 @@ bool CompareBuf(BUF *b1, BUF *b2);
 
 UINT PeekFifo(FIFO *f, void *p, UINT size);
 UINT ReadFifo(FIFO *f, void *p, UINT size);
+void ShrinkFifoMemory(FIFO *f);
 UCHAR *GetFifoPointer(FIFO *f);
 UCHAR *FifoPtr(FIFO *f);
 void WriteFifo(FIFO *f, void *p, UINT size);
@@ -329,10 +348,10 @@ void ReleaseFifo(FIFO *f);
 void CleanupFifo(FIFO *f);
 FIFO *NewFifo();
 FIFO *NewFifoFast();
-FIFO *NewFifoEx(UINT realloc_mem_size, bool fast);
+FIFO *NewFifoEx(bool fast);
 void InitFifo();
-UINT GetFifoDefaultReallocMemSize();
-void SetFifoDefaultReallocMemSize(UINT size);
+UINT GetFifoCurrentReallocMemSize();
+void SetFifoCurrentReallocMemSize(UINT size);
 
 void *Search(LIST *o, void *target);
 void Sort(LIST *o);
@@ -387,6 +406,7 @@ void InsertInt(LIST *o, UINT i);
 void InsertInt64(LIST *o, UINT64 i);
 void InsertIntDistinct(LIST *o, UINT i);
 void InsertInt64Distinct(LIST *o, UINT64 i);
+void RandomizeList(LIST *o);
 
 void *GetNext(QUEUE *q);
 void *GetNextWithLock(QUEUE *q);
@@ -400,6 +420,7 @@ void ReleaseQueue(QUEUE *q);
 void CleanupQueue(QUEUE *q);
 QUEUE *NewQueue();
 QUEUE *NewQueueFast();
+UINT GetQueueNum(QUEUE *q);
 
 SK *NewSk();
 SK *NewSkEx(bool no_compact);

@@ -566,10 +566,13 @@ HUB_AO_DisableUserModeSecureNAT				この項目が 1 (有効) の場合は、Sec
 HUB_AO_DisableCheckMacOnLocalBridge			この項目が 1 (有効) の場合は、ローカルブリッジ機能において MAC アドレスの重複チェックを無効にします。一部の LAN カードでは、ローカルブリッジ機能によって送出されたパケットが LAN カード内部で反射し仮想 HUB に戻ってくる場合があります。この場合、仮想 HUB は MAC アドレスの重複を自動的に検出し、反射してきたパケットを破棄します。このフラグを有効にすると、この検出チェックが無効になります。
 HUB_AO_DisableCorrectIpOffloadChecksum		この項目が 1 (有効) の場合は、ローカルブリッジ機能において IP チェックサムの検査および補正処理が無効になります。IP, TCP, UDP ヘッダのチェックサムのオフロード機能が搭載されている LAN カードから送信された IP パケットが同一ホスト上で動作する VPN Server のローカルブリッジに入力された場合、当該 IP パケットのチェックサムは不正確な値が代入されている場合があります。ローカルブリッジはデフォルトでその不正確な値を検出し、正しいチェックサムの計算結果を代入します。このフラグを有効にすると、これらの補正処理が無効になります。
 HUB_AO_BroadcastLimiterStrictMode			この項目が 1 (有効) の場合は、仮想 HUB 上のセッションにおけるブロードキャストストームの検出アルゴリズムにおいて、送信元 IP アドレスまたは宛先 IP アドレスのいずれか 1 個が一致していれば既存の検出用記録とヒットしたとみなします。
-HUB_AO_MaxLoggedPacketsPerMinute			Maximum number of logging target packets per minute.
-HUB_AO_DoNotSaveHeavySecurityLogs			Do not take heavy security log.
-HUB_AO_DropBroadcastsInPrivacyFilterMode	Drop broadcasting packets if the both source and destination session is PrivacyFilter mode.
-HUB_AO_DropArpInPrivacyFilterMode			Drop ARP packets if the both source and destination session is PrivacyFilter mode.
+HUB_AO_MaxLoggedPacketsPerMinute			1 分間あたりにパケットログに保存することができる最大のパケット数を指定します。
+HUB_AO_DoNotSaveHeavySecurityLogs			保存に負荷がかかるセキュリティログを保存しない設定をします。
+HUB_AO_DropBroadcastsInPrivacyFilterMode	送信元および宛先の両方のセッションがプライバシーフィルタモードの場合、ブロードキャストパケットを破棄します。
+HUB_AO_DropArpInPrivacyFilterMode			送信元および宛先の両方のセッションがプライバシーフィルタモードの場合、ARP パケットを破棄します。
+HUB_AO_SuppressClientUpdateNotification		VPN Client のアップデート通知画面の表示を抑制します。
+HUB_AO_FloodingSendQueueBufferQuota			パケットの仮想 HUB 内におけるフラッディング動作時において消費することを許容する送信キューのバッファサイズの制限値 (バイト数) を指定します。クオータは、すべての接続中の VPN セッションの送信キューの合計長さに対してグローバルに適用されます。0 を指定すると無制限になります。このオプションは、フラッディングパケットが多発するネットワークにおいてメモリ消費量が増大する問題を解決するために利用できます。
+HUB_AO_AssignVLanIdByRadiusAttribute		VLAN ID の動的割り当て機能を有効にします。VPN 接続するユーザーオブジェクトのセキュリティポリシーに VLAN ID が指定されていない場合は、各 VPN セッションはユーザー認証を行った RADIUS サーバーから返却される RADIUS 属性の値に基づき VLAN が割当てられます。RADIUS 属性のうち、 "Tunnel-Pvt-Group-ID" (ID = 81) の値が使用されます。データ型は文字列である必要があります。
 
 
 # Caps 関係
@@ -1065,14 +1068,15 @@ SVC_HIDE_TRAY_MSG		%S のユーザーモード起動時のタスクトレイア�
 
 
 # サービス関係 (UNIX)
-UNIX_SVC_HELP			%S Service Program\nCopyright (c) SoftEther VPN Project. All Rights Reserved.\n\n%S Command Usage:\n %S start  - Start %S Service.\n %S stop   - Stop %S Service if the service is already started.\n\n
-UNIX_SVC_STARTED		%S Service Started.\n
-UNIX_SVC_STOPPING		Stopping %S Service...\n
-UNIX_SVC_STOPPED		%S Service Stopped.\n
-UNIX_SVC_STOP_FAILED	%S Service Stop Failed.\n
-UNIX_SVC_ALREADY_START	%S Service is already started.\nExecute "%S stop" to stop this service.\n
-UNIX_SVC_NOT_STARTED	%S Service is not yet started.\nExecute "%S start" to start this service.\n
-UNIX_SVC_ERROR_FORK		Failed to create child process for %S Service.\n
+UNIX_SVC_HELP			%S service program\nCopyright (c) SoftEther VPN Project. All Rights Reserved.\n\n%S command usage:\n %S start  - Start the %S service.\n %S stop   - Stop the %S service if the service has been already started.\n\n
+UNIX_SVC_STARTED		The %S service has been started.\n
+UNIX_SVC_STOPPING		Stopping the %S service ...\n
+UNIX_SVC_STOPPED		%S service has been stopped.\n
+UNIX_SVC_STOP_FAILED	Stopping %S service was failed.\n
+UNIX_SVC_ALREADY_START	%S service has been already started.\nRun the "%S stop" command to stop this service.\n
+UNIX_SVC_NOT_STARTED	%S service has not yet been started.\nRun the "%S start" to start this service.\n
+UNIX_SVC_ERROR_FORK		Failed to create child process for the %S service.\n
+UNIX_SVC_NONROOT		\nWarning: The current user context is non-root. It is recommended to run the VPN service by the root user. Although the VPN service may run under non-root users, some privilege-required functions (e.g. the local bridge function) need the root privilege.\n
 
 
 # サービス定義 (SoftEther VPN Client)
@@ -1213,7 +1217,7 @@ CM_LISTENER_ERROR		エラー発生
 CM_DELETE_LISTENER_MSG	リスナー (TCP ポート %u) を削除します。今後、このポートには接続できなくなります。\r\nよろしいですか?
 CM_STOP_LISTENER_MSG	リスナー (TCP ポート %u) を停止します。リスナーを再開するまで、このポートには接続できなくなります。\r\n\r\nよろしいですか?
 CM_CLOSE_BUTTON			閉じる
-CM_CERT_SET_MSG			新しいサーバー証明書を設定しました。
+CM_CERT_SET_MSG			新しいサーバー証明書を設定しました。\r\n\r\nなお、OpenVPN クライアントを使用している場合は、OpenVPN 設定ファイルに埋め込まれている証明書を更新する必要がある場合がありますので、ご注意ください。
 CM_SHORTCUT_DISCONNECT	指定された接続先にすでに接続しています。\r\n\r\n切断しますか?
 
 
@@ -1279,9 +1283,9 @@ SM_CONN_DISCONNECT_MSG	コネクション %s を切断します。\r\nよろし�
 SM_CONNINFO_CAPTION		コネクション %s の情報
 SM_CONNINFO_NAME		コネクション名
 SM_CONNINFO_TYPE		コネクションの種類
-SM_CONNINFO_HOSTNAME	接続元ホスト名
-SM_CONNINFO_IP			接続元 IP アドレス
-SM_CONNINFO_PORT		接続元ポート番号 (TCP)
+SM_CONNINFO_HOSTNAME	クライアントホスト名
+SM_CONNINFO_IP			クライアント IP アドレス
+SM_CONNINFO_PORT		クライアントポート番号 (TCP)
 SM_CONNINFO_TIME		接続時刻
 SM_CONNINFO_SERVER_STR	サーバー製品名
 SM_CONNINFO_SERVER_VER	サーバー バージョン
@@ -1445,8 +1449,8 @@ SM_SESS_STATUS_CAPTION	VPN セッション "%S" の状況
 SM_SESS_STATUS_USERNAME	ユーザー名 (認証)
 SM_SESS_STATUS_REALUSER	ユーザー名 (データベース)
 SM_SESS_STATUS_GROUPNAME	グループ名
-SM_CLIENT_IP			接続元 IP アドレス
-SM_CLIENT_HOSTNAME		接続元ホスト名
+SM_CLIENT_IP			クライアント IP アドレス
+SM_CLIENT_HOSTNAME		クライアントホスト名
 SM_NODE_CLIENT_NAME		クライアント製品名
 SM_NODE_CLIENT_VER		クライアントバージョン
 SM_NODE_CLIENT_BUILD	クライアントビルド番号
@@ -1646,6 +1650,9 @@ SM_FACTORY_DEFAULT_PERFORMED	設定のリセット処理はサーバー上で開
 SM_AZURE_STATUS_CONNECTED		状態: クラウドに接続完了
 SM_AZURE_STATUS_NOT_CONNECTED	状態: クラウドに未接続
 SM_NO_BRIDGE_NICS				ローカルブリッジを作成することができる物理的な LAN カードが VPN サーバーのコンピュータに 1 枚も見つかりませんでした。\r\n\r\nローカルブリッジを作成するには、物理的な LAN カードを 1 枚以上コンピュータにインストールする必要があります。\r\n無線 LAN カード、3G アダプタ等は使用できません。\r\n通常のケーブル接続の Ethernet に対応した LAN カードをインストールしてください。\r\n\r\n最近インストールした LAN カードが表示されない場合は、一度コンピュータを再起動してください。\r\n\r\nローカルブリッジを使用できない場合は、代わりに「SecureNAT 機能」の仮想 NAT 機能の使用を検討してください。\r\n\r\nなお、何らかの理由で物理的な LAN カード以外の LAN カード (無線 LAN、仮想 LAN など) を使用したい場合は、設定ファイルの "LocalBridgeList" ディレクティブ内の "ShowAllInterfaces" を "true" にして VPN Server を再起動するとこれらのデバイスも表示されるようになります。(上級者向け、Windows のみ)
+SM_CERT_MESSAGE					現在サーバーに設定されている SSL 自己署名ルート証明書は古い形式です。\r\n\r\nOpenVPN プロトコルを用いてこの VPN Server に接続しているクライアントが存在する場合、現在のサーバー証明書の使用を継続すると、OpenVPN Connect for Android で不具合が発生する可能性があります。\r\n\r\nOpenVPN Connect for Android を使用してこの VPN Server に VPN 接続を行っている場合は、サーバー証明書を再作成して更新することをお勧めします。\r\n\r\nサーバー証明書を再作成して更新しますか?
+SM_CERT_MESSAGE_CLI				--- ご注意 ---\r\n\r\n現在サーバーに設定されている SSL 自己署名ルート証明書は古い形式です。\r\n\r\n現在のサーバー証明書の使用を継続した場合、OpenVPN Connect for Android で不具合が発生する可能性があります。\r\n\r\nOpenVPN Connect for Android を使用してこの VPN Server に VPN 接続を行っている場合は、サーバー証明書を再作成して更新することをお勧めします。\r\n\r\nサーバー証明書を再作成して更新するには、VPN Server を最新版にアップデートしてから、"ServerCertRegenerate" コマンドを実行してください。
+SM_CERT_NEED_ROOT				指定された SSL 証明書は、証明機関 (CA) によって発行された証明書です。\r\n\r\nこの VPN Server に Microsoft SSTP または OpenVPN プロトコルで VPN 接続を行う場合は、ルート証明書および中間証明書 (存在する場合) を VPN Server にインストールする必要があります。\r\n\r\nVPN Server にルート証明書および中間証明書をインストールするためには、X.509 証明書のルート証明書および中間証明書ファイルを VPN Server がインストールされているディレクトリの中にある "chain_certs" サブディレクトリにコピーしてください。\r\n\r\nルート証明書および中間証明書ファイルの取得方法は、証明機関 (CA) が発行している Web サイトをお読みいただくか、証明機関 (CA) のサポートに問い合わせてください。
 
 
 # User-modeRouter 管理ツール関係
@@ -1900,6 +1907,7 @@ LH_MAX_SESSION_2		コネクション "%S": VPN Server 上で管理すること�
 LH_NEW_SESSION			コネクション "%S": 新しいセッション "%S" が作成されました。(IP アドレス %S, ポート番号 %u, 物理レイヤのプロトコル: "%S")
 LH_SET_SESSION			セッション "%S": パラメータが設定されました。最大 TCP コネクション数 %u, 暗号化の使用 %s, 圧縮の使用 %s, 半二重通信の使用 %s, タイムアウト %u 秒
 LH_NODE_INFO			セッション "%S": VPN Client の詳細: (%s)
+LH_VLAN_ID				セッション "%S": 割り当てられた VLAN ID: %u
 LH_INVALID_SIGNATURE	セッション "%S": 接続してきたクライアントが無効なプロトコルデータを送信しました。クライアントとの通信が正常にできません。クライアントとこのサーバーとの間のネットワーク回線に異常が無いかどうか、特殊な透過型パケット書き換え装置を設置していないかどうか確認してください。
 LH_END_SESSION			セッション "%S": セッションが終了しました。統計情報は次の通りです。合計送信データサイズ: %I64u バイト, 合計受信データサイズ: %I64u バイト
 LH_BCAST_STORM			セッション "%S": 大量のブロードキャストパケットを検出しました。ポリシーに従ってパケットを破棄する場合があります。送信元 MAC アドレスは %S, 送信元 IP アドレスは %S, 宛先 IP アドレスは %S です。ブロードキャストパケット数は 1 秒間に %u 個以上です (なおこの情報はパケットの一部を機械的に解析した結果であり、不正確な場合があります)。
@@ -4295,7 +4303,7 @@ CMD_UNKNOWN_PARAM		このパラメータに関する説明はありません。
 
 # コンソールシステム内部で使用している文字列
 CMD_HELP_1				下記の %u 個のコマンドが使用できます:
-CMD_HELP_2				それぞれのコマンドの使用方法については、"コマンド名 /?" と入力するとヘルプが表示されます。
+CMD_HELP_2				それぞれのコマンドの使用方法については、"コマンド名 ?" と入力するとヘルプが表示されます。
 CMD_EVAL_MIN_MAX		値は %u 以上 %u 以下の整数で指定する必要があります。
 CMD_PROMPT				値を入力してください :
 CMD_EVAL_NOT_EMPTY		空白を指定することはできません。
@@ -6786,7 +6794,7 @@ CMD_RemoteDisable_Args	RemoteDisable
 
 
 # MakeCert コマンド
-CMD_MakeCert			新しい X.509 証明書と秘密鍵の作成
+CMD_MakeCert			新しい X.509 証明書と秘密鍵の作成 (1024 bit)
 CMD_MakeCert_Help		新しい X.509 証明書と秘密鍵を作成し、ファイルとして保存します。\n証明書の公開鍵と秘密鍵の生成アルゴリズムには、RSA 1024 bit が使用されます。\n証明書の種類として、ルート証明書 (自己署名証明書) と他の証明書によって署名された証明書のどちらでも作成することができます。他の証明書によって署名された証明書を作成するためには、署名に使用する証明書 (X.509 形式のファイル) と対応する秘密鍵ファイル (Base 64 エンコード) が必要です。\n\n作成する証明書には、名前 (CN)、所属機関 (O)、組織単位 (OU)、国 (C)、都道府県 (ST)、ローカル (L)、シリアル番号、有効期限を指定することができます。\n作成された証明書は X.509 形式のファイルとして、秘密鍵ファイルは RSA 1024 bit 形式の Base 64 エンコードされたファイルとしてそれぞれ保存されます。\n\nMakeCert コマンドは、証明書を作成するための必要最低限の機能を用意したツールです。本格的な証明書を作成したい場合は、OpenSSL などのフリーソフトや、市販の CA (証明機関) ソフトウェアを使用することを推奨します。\n\n※注意: このコマンドは SoftEther VPN コマンドライン管理ユーティリティから呼び出すことが可能です。現在 VPN Server や VPN Client に管理モードで接続している場合も実行できますが、実際に RSA 演算を行い、証明書データを生成しファイルに保存するのはこのコマンドを実行しているコンピュータであり、管理モードで接続先のコンピュータとは一切関係ないコンテキストで実行されます。
 CMD_MakeCert_Args		MakeCert [/CN:cn] [/O:o] [/OU:ou] [/C:c] [/ST:st] [/L:l] [/SERIAL:serial] [/EXPIRES:expires] [/SIGNCERT:signcert] [/SIGNKEY:signkey] [/SAVECERT:savecert] [/SAVEKEY:savekey]
 CMD_MakeCert_CN			作成する証明書の名前 (CN) 項目を指定します。none を指定することもできます。
@@ -6816,6 +6824,24 @@ CMD_MakeCert_ERROR_SIGNKEY		/SIGNCERT と /SIGNKEY で指定された証明書�
 CMD_MakeCert_ERROR_GEN_FAILED	証明書と秘密鍵の生成に失敗しました。
 
 
+# MakeCert2048 コマンド
+CMD_MakeCert2048			新しい X.509 証明書と秘密鍵の作成 (2048 bit)
+CMD_MakeCert2048_Help		新しい X.509 証明書と秘密鍵を作成し、ファイルとして保存します。\n証明書の公開鍵と秘密鍵の生成アルゴリズムには、RSA 2048 bit が使用されます。\n証明書の種類として、ルート証明書 (自己署名証明書) と他の証明書によって署名された証明書のどちらでも作成することができます。他の証明書によって署名された証明書を作成するためには、署名に使用する証明書 (X.509 形式のファイル) と対応する秘密鍵ファイル (Base 64 エンコード) が必要です。\n\n作成する証明書には、名前 (CN)、所属機関 (O)、組織単位 (OU)、国 (C)、都道府県 (ST)、ローカル (L)、シリアル番号、有効期限を指定することができます。\n作成された証明書は X.509 形式のファイルとして、秘密鍵ファイルは RSA 2048 bit 形式の Base 64 エンコードされたファイルとしてそれぞれ保存されます。\n\nMakeCert コマンドは、証明書を作成するための必要最低限の機能を用意したツールです。本格的な証明書を作成したい場合は、OpenSSL などのフリーソフトや、市販の CA (証明機関) ソフトウェアを使用することを推奨します。\n\n※注意: このコマンドは SoftEther VPN コマンドライン管理ユーティリティから呼び出すことが可能です。現在 VPN Server や VPN Client に管理モードで接続している場合も実行できますが、実際に RSA 演算を行い、証明書データを生成しファイルに保存するのはこのコマンドを実行しているコンピュータであり、管理モードで接続先のコンピュータとは一切関係ないコンテキストで実行されます。
+CMD_MakeCert2048_Args		MakeCert2048 [/CN:cn] [/O:o] [/OU:ou] [/C:c] [/ST:st] [/L:l] [/SERIAL:serial] [/EXPIRES:expires] [/SIGNCERT:signcert] [/SIGNKEY:signkey] [/SAVECERT:savecert] [/SAVEKEY:savekey]
+CMD_MakeCert2048_CN			作成する証明書の名前 (CN) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_O			作成する証明書の所属機関 (O) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_OU			作成する証明書の組織単位 (OU) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_C			作成する証明書の国 (C) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_ST			作成する証明書の都道府県 (ST) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_L			作成する証明書のローカル (L) 項目を指定します。none を指定することもできます。
+CMD_MakeCert2048_SERIAL		作成する証明書のシリアル番号項目を指定します。16 進数で指定します。none を指定することもできます。
+CMD_MakeCert2048_EXPIRES	作成する証明書の有効期限を指定します。none または 0 を指定すると、3650 日 (約 10 年) が使用されます。最大 10950 日 (約 30 年) まで指定できます。
+CMD_MakeCert2048_SIGNCERT	作成する証明書を、既存の証明書によって署名する場合は、署名に使用する X.509 形式の証明書のファイル名を指定します。パラメータを省略した場合は、署名は行わず新しい証明書をルート証明書として作成します。
+CMD_MakeCert2048_SIGNKEY	/SIGNCERT で指定した証明書に対応する秘密鍵 (RSA, Base-64 エンコード) を指定します。
+CMD_MakeCert2048_SAVECERT	作成した証明書を保存するファイル名を指定します。証明書は RSA 形式の 2048 bit の公開鍵を含んだ X.509 ファイルとして保存されます。
+CMD_MakeCert2048_SAVEKEY	作成した証明書に対応する秘密鍵を保存するファイル名を指定します。秘密鍵は RSA 形式の 2048 bit の秘密鍵ファイルとして保存されます。
+
+
 # TrafficClient コマンド
 CMD_TrafficClient		通信スループット測定ツールクライアントの実行
 CMD_TrafficClient_Help	通信スループット測定ツールの、クライアントプログラムを実行します。\n通信スループット測定ツールは TrafficClient と TrafficServer の 2 つのコマンドとして利用し、IP ネットワーク上で接続された 2 台のコンピュータの間で伝送することができる通信スループットを計測することができます。すでに別のコンピュータ上で、TrafficServer コマンドを用いて通信スループット測定ツールサーバーを待機させておき、TrafficClient コマンドで、そのサーバーのホスト名または IP アドレスとポート番号を指定して接続し、通信速度を測定することができます。\n通信速度の測定は、同時に複数本の TCP コネクションを確立し、それぞれのコネクションで最大限にストリームデータを伝送した結果、指定された時間内に実際に伝送することができたデータのビット数を計算し、それを元に通信スループットの平均値 (bps) を算出する方法で行われます。通常、1 本の TCP コネクションを用いた場合は TCP のアルゴリズム上の限界により、実際のネットワークスループットよりも遅い速度でしか通信できない場合が多いため、複数本の TCP コネクションを同時に確立して通信した結果を測定することを推奨します。この測定方法によって計測されたスループットは実際に TCP でストリームとして受信側に届いたデータのビット長から計算されるため、途中で発生したパケットロスやデータ破損したパケットは、実際に届いたパケットには含まれず、純粋なネットワークの最大通信可能帯域幅に近い値を算出することができます。\n測定結果として TCP 内で伝送されたストリームサイズから、実際にネットワーク上を流れたデータ量の近似値を計算し、それを時間で割ってビット毎秒 (bps) を算出します。物理的なネットワークの種類は Ethernet (IEEE802.3) で、MAC フレームのペイロードサイズは 1,500 Bytes (TCP の MSS は 1,460 Bytes) と仮定して計算が行われます。/RAW オプションを指定すると、TCP/IP ヘッダや MAC ヘッダのデータ量を補正する計算は行われません。\n\n※注意: このコマンドは SoftEther VPN コマンドライン管理ユーティリティから呼び出すことが可能です。現在 VPN Server や VPN Client に管理モードで接続している場合も実行できますが、実際に通信を行ってスループットを測定するのは、このコマンドを実行しているコンピュータであり、管理モードで接続先のコンピュータとは一切関係ないコンテキストで実行されます。
@@ -6834,7 +6860,7 @@ CMD_TrafficClient_ERROR_HOSTPORT	ホスト名またはポート番号の指定�
 
 # TrafficServer コマンド
 CMD_TrafficServer		通信スループット測定ツールサーバーの実行
-CMD_TrafficServer_Help	通信スループット測定ツールのサーバープログラムを実行します。\n通信スループット測定ツールは、TrafficClient と TrafficServer の 2 つのコマンドとして利用し、IP ネットワーク上で接続された 2 台のコンピュータの間で伝送することができる通信スループットを計測することができます。\nこのコンピュータ上の TCP ポートを待機状態にして、別のコンピュータからの TrafficClient からの接続を待ち受けるには、TrafficServer コマンドにポート番号を指定して起動します。\n通信スループット測定ツールに関する詳細は、TrafficClient /? と入力すると表示されます。\n\n※注意: このコマンドは SoftEther VPN コマンドライン管理ユーティリティから呼び出すことが可能です。現在 VPN Server や VPN Client に管理モードで接続している場合も実行できますが、実際に通信を行ってスループットを測定するのは、このコマンドを実行しているコンピュータであり、管理モードで接続先のコンピュータとは一切関係ないコンテキストで実行されます。
+CMD_TrafficServer_Help	通信スループット測定ツールのサーバープログラムを実行します。\n通信スループット測定ツールは、TrafficClient と TrafficServer の 2 つのコマンドとして利用し、IP ネットワーク上で接続された 2 台のコンピュータの間で伝送することができる通信スループットを計測することができます。\nこのコンピュータ上の TCP ポートを待機状態にして、別のコンピュータからの TrafficClient からの接続を待ち受けるには、TrafficServer コマンドにポート番号を指定して起動します。\n通信スループット測定ツールに関する詳細は、"TrafficClient ?" と入力すると表示されます。\n\n※注意: このコマンドは SoftEther VPN コマンドライン管理ユーティリティから呼び出すことが可能です。現在 VPN Server や VPN Client に管理モードで接続している場合も実行できますが、実際に通信を行ってスループットを測定するのは、このコマンドを実行しているコンピュータであり、管理モードで接続先のコンピュータとは一切関係ないコンテキストで実行されます。
 CMD_TrafficServer_Args	TrafficServer [port]
 CMD_TrafficServer_[port]	接続を待ち受けるポート番号を整数で指定します。指定されたポートが、すでに別のプログラムによって使用中の場合や、ポートを開くことができない場合はエラーが発生します。
 

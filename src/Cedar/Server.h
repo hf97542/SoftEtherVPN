@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -279,6 +294,7 @@ struct SERVER
 	bool DisableIntelAesAcceleration;	// Disable the Intel AES acceleration
 	bool NoMoreSave;					// Do not save any more
 	bool EnableConditionalAccept;		// Apply the Conditional Accept the Listener
+	bool EnableLegacySSL;				// Enable Legacy SSL
 
 	volatile bool Halt;					// Halting flag
 	LOCK *lock;							// Lock
@@ -335,6 +351,9 @@ struct SERVER
 
 	AZURE_CLIENT *AzureClient;			// VPN Azure client
 	bool EnableVpnAzure;				// Flag whether VPN Azure client is enabled
+
+	bool DisableGetHostNameWhenAcceptTcp;	// Disable GetHostName when accepting TCP
+	bool DisableCoreDumpOnUnix;			// Disable core dump on UNIX
 
 	TINY_LOG *DebugLog;					// Debug log
 
@@ -412,6 +431,36 @@ struct LOG_FILE
 #define	GSF_DISABLE_AC					5
 #define	GSF_DISABLE_SYSLOG				6
 #define	GSF_SHOW_OSS_MSG				7
+#define	GSF_LOCALBRIDGE_NO_DISABLE_OFFLOAD	8
+#define	GSF_DISABLE_SESSION_RECONNECT	9
+
+// Global parameters
+#define	NUM_GLOBAL_PARAMS					128
+#define	GP_MAX_SEND_SOCKET_QUEUE_SIZE		1
+#define	GP_MIN_SEND_SOCKET_QUEUE_SIZE		2
+#define	GP_MAX_SEND_SOCKET_QUEUE_NUM		3
+#define	GP_SELECT_TIME						4
+#define	GP_SELECT_TIME_FOR_NAT				5
+#define	GP_MAX_STORED_QUEUE_NUM				6
+#define	GP_MAX_BUFFERING_PACKET_SIZE		7
+#define	GP_HUB_ARP_SEND_INTERVAL			8
+#define	GP_MAC_TABLE_EXPIRE_TIME			9
+#define	GP_IP_TABLE_EXPIRE_TIME				10
+#define	GP_IP_TABLE_EXPIRE_TIME_DHCP		11
+#define	GP_STORM_CHECK_SPAN					12
+#define	GP_STORM_DISCARD_VALUE_START		13
+#define	GP_STORM_DISCARD_VALUE_END			14
+#define	GP_MAX_MAC_TABLES					15
+#define	GP_MAX_IP_TABLES					16
+#define	GP_MAX_HUB_LINKS					17
+#define	GP_MEM_FIFO_REALLOC_MEM_SIZE		18
+#define	GP_QUEUE_BUDGET						19
+#define	GP_FIFO_BUDGET						20
+
+extern UINT vpn_global_parameters[NUM_GLOBAL_PARAMS];
+
+#define	VPN_GP(id, default_value)	((UINT)(vpn_global_parameters[(id)] != 0 ? vpn_global_parameters[(id)] : (default_value)))
+
 
 
 // Virtual HUB creation history
@@ -465,6 +514,9 @@ void SiWriteListenerCfg(FOLDER *f, SERVER_LISTENER *r);
 void SiLoadListenerCfg(SERVER *s, FOLDER *f);
 void SiWriteServerCfg(FOLDER *f, SERVER *s);
 void SiLoadServerCfg(SERVER *s, FOLDER *f);
+void SiWriteGlobalParamsCfg(FOLDER *f);
+void SiLoadGlobalParamsCfg(FOLDER *f);
+void SiLoadGlobalParamItem(UINT id, UINT value);
 void SiWriteTraffic(FOLDER *parent, char *name, TRAFFIC *t);
 void SiWriteTrafficInner(FOLDER *parent, char *name, TRAFFIC_ENTRY *e);
 void SiLoadTrafficInner(FOLDER *parent, char *name, TRAFFIC_ENTRY *e);
@@ -625,6 +677,8 @@ UINT SiDebugProcGetIPsecMessageDisplayedValue(SERVER *s, char *in_str, char *ret
 UINT SiDebugProcSetIPsecMessageDisplayedValue(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
 UINT SiDebugProcGetVgsMessageDisplayedValue(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
 UINT SiDebugProcSetVgsMessageDisplayedValue(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
+UINT SiDebugProcGetCurrentTcpSendQueueLength(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
+UINT SiDebugProcGetCurrentGetIPThreadCount(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
 
 typedef UINT (SI_DEBUG_PROC)(SERVER *s, char *in_str, char *ret_str, UINT ret_str_size);
 
@@ -688,6 +742,7 @@ bool SiGetAzureEnable(SERVER *s);
 void SiUpdateCurrentRegion(CEDAR *c, char *region, bool force_update);
 void SiGetCurrentRegion(CEDAR *c, char *region, UINT region_size);
 bool SiIsEnterpriseFunctionsRestrictedOnOpenSource(CEDAR *c);
+bool SiCheckCurrentRegion(CEDAR *c, char *r);
 
 #endif	// SERVER_H
 

@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -580,6 +595,9 @@ void DataToHubOptionStruct(HUB_OPTION *o, RPC_ADMIN_OPTION *ao)
 	GetHubAdminOptionDataAndSet(ao, "DoNotSaveHeavySecurityLogs", &o->DoNotSaveHeavySecurityLogs);
 	GetHubAdminOptionDataAndSet(ao, "DropBroadcastsInPrivacyFilterMode", &o->DropBroadcastsInPrivacyFilterMode);
 	GetHubAdminOptionDataAndSet(ao, "DropArpInPrivacyFilterMode", &o->DropArpInPrivacyFilterMode);
+	GetHubAdminOptionDataAndSet(ao, "SuppressClientUpdateNotification", &o->SuppressClientUpdateNotification);
+	GetHubAdminOptionDataAndSet(ao, "FloodingSendQueueBufferQuota", &o->FloodingSendQueueBufferQuota);
+	GetHubAdminOptionDataAndSet(ao, "AssignVLanIdByRadiusAttribute", &o->AssignVLanIdByRadiusAttribute);
 }
 
 // Convert the contents of the HUB_OPTION to data
@@ -643,6 +661,9 @@ void HubOptionStructToData(RPC_ADMIN_OPTION *ao, HUB_OPTION *o, char *hub_name)
 	Add(aol, NewAdminOption("DoNotSaveHeavySecurityLogs", o->DoNotSaveHeavySecurityLogs));
 	Add(aol, NewAdminOption("DropBroadcastsInPrivacyFilterMode", o->DropBroadcastsInPrivacyFilterMode));
 	Add(aol, NewAdminOption("DropArpInPrivacyFilterMode", o->DropArpInPrivacyFilterMode));
+	Add(aol, NewAdminOption("SuppressClientUpdateNotification", o->SuppressClientUpdateNotification));
+	Add(aol, NewAdminOption("FloodingSendQueueBufferQuota", o->FloodingSendQueueBufferQuota));
+	Add(aol, NewAdminOption("AssignVLanIdByRadiusAttribute", o->AssignVLanIdByRadiusAttribute));
 
 	Zero(ao, sizeof(RPC_ADMIN_OPTION));
 
@@ -2031,6 +2052,7 @@ bool IsPacketMaskedByAccessList(SESSION *s, PKT *p, ACCESS *a, UINT64 dest_usern
 	IPV6_HEADER *ip6 = NULL;
 	bool is_ipv4_packet = false;
 	bool is_ipv6_packet = false;
+	bool is_arp_packet = false;
 	// Validate arguments
 	if (s == NULL || p == NULL || a == NULL)
 	{
@@ -2161,6 +2183,11 @@ bool IsPacketMaskedByAccessList(SESSION *s, PKT *p, ACCESS *a, UINT64 dest_usern
 	else
 	{
 		is_ipv6_packet = true;
+	}
+
+	if (p->TypeL3 == L3_ARPV4)
+	{
+		is_arp_packet = true;
 	}
 
 	if (is_ipv4_packet)
@@ -2329,7 +2356,7 @@ bool IsPacketMaskedByAccessList(SESSION *s, PKT *p, ACCESS *a, UINT64 dest_usern
 	}
 
 	// Don't match the packet of non-IPv4 and non-IPv6
-	if (is_ipv4_packet == false && is_ipv6_packet==false)
+	if (is_arp_packet)
 	{
 		if (s->Hub != NULL && s->Hub->Option != NULL && s->Hub->Option->ApplyIPv4AccessListOnArpPacket)
 		{
@@ -2728,7 +2755,7 @@ void ForceRedirectToUrl(HUB *hub, SESSION *src_session, PKT *p, char *redirect_u
 
 	// Reply packet
 	StorePacketToHubPa((HUB_PA *)src_session->PacketAdapter->Param,
-		NULL, b->Buf, b->Size, NULL);
+		NULL, b->Buf, b->Size, NULL, false, false);
 
 	// Release the memory
 	Free(tcp_data);
@@ -3415,13 +3442,16 @@ void HubPaFree(SESSION *s)
 	}
 
 	// Erase MAC address table entries that is associated with this session
-	LockList(hub->MacTable);
+	LockHashList(hub->MacHashTable);
 	{
-		UINT i, num = LIST_NUM(hub->MacTable);
+		UINT i, num;
+		MAC_TABLE_ENTRY **pp;
 		LIST *o = NewListFast(NULL);
+
+		pp = (MAC_TABLE_ENTRY **)HashListToArray(hub->MacHashTable, &num);
 		for (i = 0;i < num;i++)
 		{
-			MAC_TABLE_ENTRY *e = (MAC_TABLE_ENTRY *)LIST_DATA(hub->MacTable, i);
+			MAC_TABLE_ENTRY *e = (MAC_TABLE_ENTRY *)pp[i];
 			if (e->Session == s)
 			{
 				Add(o, e);
@@ -3430,10 +3460,11 @@ void HubPaFree(SESSION *s)
 		for (i = 0;i < LIST_NUM(o);i++)
 		{
 			MAC_TABLE_ENTRY *e = (MAC_TABLE_ENTRY *)LIST_DATA(o, i);
-			Delete(hub->MacTable, e);
+			DeleteHash(hub->MacHashTable, e);
 			Free(e);
 		}
 		ReleaseList(o);
+		Free(pp);
 	}
 	{
 		UINT i, num = LIST_NUM(hub->IpTable);
@@ -3454,7 +3485,7 @@ void HubPaFree(SESSION *s)
 		}
 		ReleaseList(o);
 	}
-	UnlockList(hub->MacTable);
+	UnlockHashList(hub->MacHashTable);
 
 	// Release the STORM list
 	LockList(pa->StormList);
@@ -3479,6 +3510,11 @@ void HubPaFree(SESSION *s)
 		while (b = GetNext(pa->PacketQueue))
 		{
 			// Release the block
+			if (b->IsFlooding)
+			{
+				CedarAddCurrentTcpQueueSize(s->Cedar, -((int)b->Size));
+			}
+
 			FreeBlock(b);
 		}
 	}
@@ -3521,6 +3557,11 @@ UINT HubPaGetNextPacket(SESSION *s, void **data)
 		}
 		else
 		{
+			if (block->IsFlooding)
+			{
+				CedarAddCurrentTcpQueueSize(s->Cedar, -((int)block->Size));
+			}
+
 			// Found
 			*data = block->Buf;
 			ret = block->Size;
@@ -3927,11 +3968,11 @@ void StorePacket(HUB *hub, SESSION *s, PKT *packet)
 	bool broadcast_mode;
 	HUB_PA *dest_pa;
 	SESSION *dest_session;
-	TRAFFIC traffic;
 	UINT64 now = Tick64();
 	bool no_heavy = false;
 	bool drop_broadcast_packet_privacy = false;
 	bool drop_arp_packet_privacy = false;
+	UINT tcp_queue_quota = 0;
 	// Validate arguments
 	if (hub == NULL || packet == NULL)
 	{
@@ -3954,10 +3995,11 @@ void StorePacket(HUB *hub, SESSION *s, PKT *packet)
 		no_heavy = hub->Option->DoNotSaveHeavySecurityLogs;
 		drop_broadcast_packet_privacy = hub->Option->DropBroadcastsInPrivacyFilterMode;
 		drop_arp_packet_privacy = hub->Option->DropArpInPrivacyFilterMode;
+		tcp_queue_quota = hub->Option->FloodingSendQueueBufferQuota;
 	}
 
 	// Lock the entire MAC address table
-	LockList(hub->MacTable);
+	LockHashList(hub->MacHashTable);
 	{
 		// Filtering
 		if (s != NULL && (packet->DelayedForwardTick == 0 && StorePacketFilter(s, packet) == false))
@@ -4018,7 +4060,7 @@ DISCARD_PACKET:
 
 			if (forward_now)
 			{
-				if (Cmp(packet->MacAddressSrc, hub->HubMacAddr, 6) == 0)
+				if (memcmp(packet->MacAddressSrc, hub->HubMacAddr, 6) == 0)
 				{
 					if (s != NULL)
 					{
@@ -4026,7 +4068,7 @@ DISCARD_PACKET:
 						goto DISCARD_PACKET;
 					}
 				}
-				if (s != NULL && (Cmp(packet->MacAddressSrc, hub->HubMacAddr, 6) != 0))
+				if (s != NULL && (memcmp(packet->MacAddressSrc, hub->HubMacAddr, 6) != 0))
 				{
 					// Check whether the source MAC address is registered in the table
 					Copy(t.MacAddress, packet->MacAddressSrc, 6);
@@ -4038,28 +4080,39 @@ DISCARD_PACKET:
 					{
 						t.VlanId = 0;
 					}
-					entry = Search(hub->MacTable, &t);
+					entry = SearchHash(hub->MacHashTable, &t);
 
 					if (entry == NULL)
 					{
-						// Remove old entries
-						DeleteExpiredMacTableEntry(hub->MacTable);
+						if (hub->LastFlushTick == 0 || (hub->LastFlushTick + (UINT64)OLD_MAC_ADDRESS_ENTRY_FLUSH_INTERVAL) < now)
+						{
+							hub->LastFlushTick = now;
+
+							// Remove old entries
+							DeleteExpiredMacTableEntry(hub->MacHashTable);
+						}
 
 						// Register since it is not registered
 						if ((s->Policy->MaxMac != 0 || s->Policy->NoBridge) && (s->IsOpenVPNL3Session == false))
 						{
 							UINT i, num_mac_for_me = 0;
 							UINT limited_count;
+							MAC_TABLE_ENTRY **pp;
+							UINT num_pp;
+
+							pp = (MAC_TABLE_ENTRY **)HashListToArray(hub->MacHashTable, &num_pp);
 
 							// Examine a number of MAC addresses that are registered in this current session
-							for (i = 0;i < LIST_NUM(hub->MacTable);i++)
+							for (i = 0;i < num_pp;i++)
 							{
-								MAC_TABLE_ENTRY *e = LIST_DATA(hub->MacTable, i);
+								MAC_TABLE_ENTRY *e = pp[i];
 								if (e->Session == s)
 								{
 									num_mac_for_me++;
 								}
 							}
+
+							Free(pp);
 
 							limited_count = 0xffffffff;
 							if (s->Policy->NoBridge)
@@ -4100,27 +4153,10 @@ DISCARD_PACKET:
 							}
 						}
 
-						if (LIST_NUM(hub->MacTable) >= MAX_MAC_TABLES)
+						if (HASH_LIST_NUM(hub->MacHashTable) >= MAX_MAC_TABLES)
 						{
-							// Delete the oldest entry because the MAC table database is
-							// exceeded the maximum number of entries
-							UINT i;
-							UINT64 old_time = 0xffffffffffffffffULL;
-							MAC_TABLE_ENTRY *old_entry = NULL;
-							for (i = 0;i < LIST_NUM(hub->MacTable);i++)
-							{
-								MAC_TABLE_ENTRY *e = LIST_DATA(hub->MacTable, i);
-								if (e->UpdatedTime <= old_time)
-								{
-									old_time = e->UpdatedTime;
-									old_entry = e;
-								}
-							}
-							if (old_entry != NULL)
-							{
-								Delete(hub->MacTable, old_entry);
-								Free(old_entry);
-							}
+							// Number of MAC addresses exceeded, discard the packet
+							goto DISCARD_PACKET;
 						}
 
 						entry = ZeroMalloc(sizeof(MAC_TABLE_ENTRY));
@@ -4137,7 +4173,7 @@ DISCARD_PACKET:
 						entry->Session = s;
 						entry->UpdatedTime = entry->CreatedTime = now;
 
-						Insert(hub->MacTable, entry);
+						AddHash(hub->MacHashTable, entry);
 
 						if (hub->Option->NoMacAddressLog == false)
 						{
@@ -4146,19 +4182,16 @@ DISCARD_PACKET:
 
 							if (s != NULL)
 							{
-								MacToStr(mac_address, sizeof(mac_address), packet->MacAddressSrc);
-//								Debug("Register MAC Address %s to Session %X.\n", mac_address, s);
-
-								if (packet->VlanId == 0)
+								if (no_heavy == false)
 								{
-									if (no_heavy == false)
+									MacToStr(mac_address, sizeof(mac_address), packet->MacAddressSrc);
+	//								Debug("Register MAC Address %s to Session %X.\n", mac_address, s);
+
+									if (packet->VlanId == 0)
 									{
 										HLog(hub, "LH_MAC_REGIST", s->Name, mac_address);
 									}
-								}
-								else
-								{
-									if (no_heavy == false)
+									else
 									{
 										HLog(hub, "LH_MAC_REGIST_VLAN", s->Name, mac_address, packet->VlanId);
 									}
@@ -4194,7 +4227,7 @@ DISCARD_PACKET:
 							}
 
 							// It's already registered and it's in another session
-							if (check_mac && (Cmp(packet->MacAddressSrc, hub->HubMacAddr, 6) != 0) &&
+							if (check_mac && (memcmp(packet->MacAddressSrc, hub->HubMacAddr, 6) != 0) &&
 								((entry->UpdatedTime + MAC_TABLE_EXCLUSIVE_TIME) >= now))
 							{
 								UCHAR *mac = packet->MacAddressSrc;
@@ -4211,7 +4244,7 @@ DISCARD_PACKET:
 
 									if ((s->LastDLinkSTPPacketSendTick != 0) &&
 										(tick_diff < 750ULL) &&
-										(Cmp(hash, s->LastDLinkSTPPacketDataHash, MD5_SIZE) == 0))
+										(memcmp(hash, s->LastDLinkSTPPacketDataHash, MD5_SIZE) == 0))
 									{
 										// Discard if the same packet sent before 750ms ago
 										Debug("D-Link Discard %u\n", (UINT)tick_diff);
@@ -4254,18 +4287,15 @@ UPDATE_FDB:
 
 									if (s != NULL)
 									{
-										MacToStr(mac_address, sizeof(mac_address), packet->MacHeader->SrcAddress);
-										Debug("Register MAC Address %s to Session %X.\n", mac_address, s);
-										if (packet->VlanId == 0)
+										if (no_heavy == false)
 										{
-											if (no_heavy == false)
+											MacToStr(mac_address, sizeof(mac_address), packet->MacHeader->SrcAddress);
+											Debug("Register MAC Address %s to Session %X.\n", mac_address, s);
+											if (packet->VlanId == 0)
 											{
 												HLog(hub, "LH_MAC_REGIST", s->Name, mac_address);
 											}
-										}
-										else
-										{
-											if (no_heavy == false)
+											else
 											{
 												HLog(hub, "LH_MAC_REGIST_VLAN", s->Name, mac_address, packet->VlanId);
 											}
@@ -4298,7 +4328,7 @@ UPDATE_FDB:
 					{
 						t.VlanId = 0;
 					}
-					entry = Search(hub->MacTable, &t);
+					entry = SearchHash(hub->MacHashTable, &t);
 
 					if (entry == NULL)
 					{
@@ -4719,30 +4749,6 @@ UPDATE_FDB:
 					}
 				}
 
-				// Adding traffic
-				Zero(&traffic, sizeof(traffic));
-				if (packet->BroadcastPacket)
-				{
-					// Broadcast
-					traffic.Send.BroadcastBytes = packet->PacketSize;
-					traffic.Send.BroadcastCount = 1;
-				}
-				else
-				{
-					// Unicast
-					traffic.Send.UnicastBytes = packet->PacketSize;
-					traffic.Send.UnicastCount = 1;
-				}
-
-				if (s != NULL)
-				{
-					AddTrafficForSession(s, &traffic);
-				}
-
-				// Invert the Recv and Send of traffic information
-				Copy(&traffic.Recv, &traffic.Send, sizeof(TRAFFIC_ENTRY));
-				Zero(&traffic.Send, sizeof(TRAFFIC_ENTRY));
-
 				// Broadcast this packet to the monitor port of the HUB
 				if (hub->MonitorList->num_item != 0)
 				{
@@ -4761,7 +4767,7 @@ UPDATE_FDB:
 								data = MallocFast(size);
 								Copy(data, packet->PacketData, size);
 								StorePacketToHubPa((HUB_PA *)monitor_session->PacketAdapter->Param,
-									s, data, size, packet);
+									s, data, size, packet, false, false);
 							}
 						}
 					}
@@ -4770,6 +4776,7 @@ UPDATE_FDB:
 
 				if (broadcast_mode == false)
 				{
+					// Unicast packet
 					if (dest_pa != NULL)
 					{
 						if (dest_session->Policy->NoIPv6DefaultRouterInRA ||
@@ -4877,8 +4884,8 @@ UPDATE_FDB:
 
 						if (s != NULL)
 						{
-							if (Cmp(packet->MacAddressSrc, s->Hub->HubMacAddr, 6) == 0 ||
-								Cmp(packet->MacAddressDest, s->Hub->HubMacAddr, 6) == 0)
+							if (memcmp(packet->MacAddressSrc, s->Hub->HubMacAddr, 6) == 0 ||
+								memcmp(packet->MacAddressDest, s->Hub->HubMacAddr, 6) == 0)
 							{
 								goto DISCARD_UNICAST_PACKET;
 							}
@@ -4895,10 +4902,7 @@ UPDATE_FDB:
 						}
 
 						// Store to the destination HUB_PA
-						StorePacketToHubPa(dest_pa, s, packet->PacketData, packet->PacketSize, packet);
-
-						// Adding traffic
-						AddTrafficForSession(dest_session, &traffic);
+						StorePacketToHubPa(dest_pa, s, packet->PacketData, packet->PacketSize, packet, false, false);
 					}
 					else
 					{
@@ -4908,6 +4912,9 @@ DISCARD_UNICAST_PACKET:
 				}
 				else
 				{
+					// Flooding as a broadcast packet
+					UINT current_tcp_queue_size = 0;
+
 					// Take a packet log
 					if (s != NULL)
 					{
@@ -4935,6 +4942,28 @@ DISCARD_UNICAST_PACKET:
 								if (dest_session->IsMonitorMode)
 								{
 									discard = true;
+								}
+
+								if (tcp_queue_quota != 0)
+								{
+									current_tcp_queue_size = CedarGetCurrentTcpQueueSize(hub->Cedar);
+
+									if (current_tcp_queue_size >= tcp_queue_quota)
+									{
+										// Quota exceeded. Discard the packet for normal session.
+										if (dest_session->Connection != NULL &&
+											dest_session->Connection->Protocol == CONNECTION_TCP)
+										{
+											discard = true;
+										}
+
+										if (dest_session->LinkModeServer)
+										{
+											LINK *k = dest_session->Link;
+
+											discard = true;
+										}
+									}
 								}
 
 								if (dest_session->VLanId != 0 && packet->TypeL3 == L3_TAGVLAN &&
@@ -5059,8 +5088,8 @@ DISCARD_UNICAST_PACKET:
 
 								if (s != NULL)
 								{
-									if (Cmp(packet->MacAddressSrc, s->Hub->HubMacAddr, 6) == 0 ||
-										Cmp(packet->MacAddressDest, s->Hub->HubMacAddr, 6) == 0)
+									if (memcmp(packet->MacAddressSrc, s->Hub->HubMacAddr, 6) == 0 ||
+										memcmp(packet->MacAddressDest, s->Hub->HubMacAddr, 6) == 0)
 									{
 										discard = true;
 									}
@@ -5068,24 +5097,25 @@ DISCARD_UNICAST_PACKET:
 
 								if (discard == false && dest_pa != NULL)
 								{
-									// Store in session other than its own
-									data = MallocFast(packet->PacketSize);
-									Copy(data, packet->PacketData, packet->PacketSize);
-									size = packet->PacketSize;
-
-									if (delete_default_router_in_ra)
+									if (s == NULL ||
+										ApplyAccessListToForwardPacket(s->Hub, s, dest_pa->Session, packet))
 									{
-										PKT *pkt2 = ParsePacket(data, size);
+										// Store in session other than its own
+										data = MallocFast(packet->PacketSize);
+										Copy(data, packet->PacketData, packet->PacketSize);
+										size = packet->PacketSize;
 
-										DeleteIPv6DefaultRouterInRA(pkt2);
+										if (delete_default_router_in_ra)
+										{
+											PKT *pkt2 = ParsePacket(data, size);
 
-										FreePacket(pkt2);
+											DeleteIPv6DefaultRouterInRA(pkt2);
+
+											FreePacket(pkt2);
+										}
+
+										StorePacketToHubPa(dest_pa, s, data, size, packet, true, true);
 									}
-
-									StorePacketToHubPa(dest_pa, s, data, size, packet);
-
-									// Adding traffic
-									AddTrafficForSession(dest_session, &traffic);
 								}
 							}
 						}
@@ -5099,7 +5129,7 @@ DISCARD_BROADCAST_PACKET:
 			}
 		}
 	}
-	UnlockList(hub->MacTable);
+	UnlockHashList(hub->MacHashTable);
 }
 
 // Examine the maximum number of logging target packets per minute
@@ -5261,7 +5291,7 @@ STORM *SearchStormList(HUB_PA *pa, UCHAR *mac_address, IP *src_ip, IP *dest_ip, 
 }
 
 // Store the packet to destination HUB_PA
-void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *packet)
+void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *packet, bool is_flooding, bool no_check_acl)
 {
 	BLOCK *b;
 	// Validate arguments
@@ -5276,13 +5306,16 @@ void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *
 		return;
 	}
 
-	if (src != NULL)
+	if (no_check_acl == false)
 	{
-		// Apply the access list for forwarding
-		if (ApplyAccessListToForwardPacket(src->Hub, src, dest->Session, packet) == false)
+		if (src != NULL)
 		{
-			Free(data);
-			return;
+			// Apply the access list for forwarding
+			if (ApplyAccessListToForwardPacket(src->Hub, src, dest->Session, packet) == false)
+			{
+				Free(data);
+				return;
+			}
 		}
 	}
 
@@ -5383,11 +5416,19 @@ void StorePacketToHubPa(HUB_PA *dest, SESSION *src, void *data, UINT size, PKT *
 	LockQueue(dest->PacketQueue);
 	{
 		// Measure the length of queue
-		if ((dest->PacketQueue->num_item < MAX_STORED_QUEUE_NUM) ||
-			(((UCHAR *)data)[12] == 'S' && ((UCHAR *)data)[13] == 'E'))
+		if (dest->PacketQueue->num_item < MAX_STORED_QUEUE_NUM)
 		{
 			// Store
 			InsertQueue(dest->PacketQueue, b);
+
+			if (is_flooding)
+			{
+				if (src != NULL)
+				{
+					b->IsFlooding = true;
+					CedarAddCurrentTcpQueueSize(src->Cedar, b->Size);
+				}
+			}
 		}
 		else
 		{
@@ -5714,7 +5755,7 @@ bool StorePacketFilterByPolicy(SESSION *s, PKT *p)
 						MAC_TABLE_ENTRY *mac_table, mt;
 						mt.VlanId = 0;
 						Copy(&mt.MacAddress, &h->ClientMacAddress, 6);
-						mac_table = Search(hub->MacTable, &mt);
+						mac_table = SearchHash(hub->MacHashTable, &mt);
 
 						if (mac_table != NULL)
 						{
@@ -5786,21 +5827,25 @@ UPDATE_DHCP_ALLOC_ENTRY:
 }
 
 // Delete the expired MAC table entries
-void DeleteExpiredMacTableEntry(LIST *o)
+void DeleteExpiredMacTableEntry(HASH_LIST *h)
 {
 	LIST *o2;
 	UINT i;
+	MAC_TABLE_ENTRY **pp;
+	UINT num;
 	// Validate arguments
-	if (o == NULL)
+	if (h == NULL)
 	{
 		return;
 	}
 
 	o2 = NewListFast(NULL);
 
-	for (i = 0;i < LIST_NUM(o);i++)
+	pp = (MAC_TABLE_ENTRY **)HashListToArray(h, &num);
+
+	for (i = 0;i < num;i++)
 	{
-		MAC_TABLE_ENTRY *e = LIST_DATA(o, i);
+		MAC_TABLE_ENTRY *e = pp[i];
 		if ((e->UpdatedTime + (UINT64)MAC_TABLE_EXPIRE_TIME) <= Tick64())
 		{
 			Add(o2, e);
@@ -5810,11 +5855,13 @@ void DeleteExpiredMacTableEntry(LIST *o)
 	for (i = 0;i < LIST_NUM(o2);i++)
 	{
 		MAC_TABLE_ENTRY *e = LIST_DATA(o2, i);
-		Delete(o, e);
+		DeleteHash(h, e);
 		Free(e);
 	}
 
 	ReleaseList(o2);
+
+	Free(pp);
 }
 
 // Delete the expired IP table entries
@@ -6616,7 +6663,7 @@ void CleanupHub(HUB *h)
 	DeleteLock(h->lock_online);
 	Free(h->Name);
 	ReleaseList(h->SessionList);
-	ReleaseList(h->MacTable);
+	ReleaseHashList(h->MacHashTable);
 	ReleaseList(h->IpTable);
 	ReleaseList(h->MonitorList);
 	ReleaseList(h->LinkList);
@@ -6677,6 +6724,24 @@ int CompareIpTable(void *p1, void *p2)
 	return CmpIpAddr(&e1->Ip, &e2->Ip);
 }
 
+// Get hash of MAC table entry
+UINT GetHashOfMacTable(void *p)
+{
+	UINT v;
+	MAC_TABLE_ENTRY *e = p;
+
+	if (e == NULL)
+	{
+		return 0;
+	}
+
+	v = e->MacAddress[0] + e->MacAddress[1] + e->MacAddress[2] + 
+		e->MacAddress[3] + e->MacAddress[4] + e->MacAddress[5] + 
+		e->VlanId;
+
+	return v;
+}
+
 // Comparison function of the MAC table entries
 int CompareMacTable(void *p1, void *p2)
 {
@@ -6692,7 +6757,7 @@ int CompareMacTable(void *p1, void *p2)
 	{
 		return 0;
 	}
-	r = Cmp(e1->MacAddress, e2->MacAddress, 6);
+	r = memcmp(e1->MacAddress, e2->MacAddress, 6);
 	if (r != 0)
 	{
 		return r;
@@ -6945,7 +7010,7 @@ HUB *NewHub(CEDAR *cedar, char *HubName, HUB_OPTION *option)
 	h->NumSessions = NewCounter();
 	h->NumSessionsClient = NewCounter();
 	h->NumSessionsBridge = NewCounter();
-	h->MacTable = NewList(CompareMacTable);
+	h->MacHashTable = NewHashList(GetHashOfMacTable, CompareMacTable, 8, false);
 	h->IpTable = NewList(CompareIpTable);
 	h->MonitorList = NewList(NULL);
 	h->LinkList = NewList(NULL);

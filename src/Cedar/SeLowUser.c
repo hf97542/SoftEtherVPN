@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -139,15 +154,9 @@ bool SuInstallDriverInner(bool force)
 	wchar_t tmp_dir[MAX_PATH];
 	char *cpu_type = MsIsX64() ? "x64" : "x86";
 
-	if (SuIsSupportedOs() == false)
+	if (SuIsSupportedOs(true) == false)
 	{
 		// Unsupported OS
-		return false;
-	}
-
-	if (MsIsServiceRunning("RemoteAccess"))
-	{
-		// Remote Access service is running
 		return false;
 	}
 
@@ -240,12 +249,34 @@ bool SuInstallDriverInner(bool force)
 }
 
 // Get whether the current OS is supported by SeLow
-bool SuIsSupportedOs()
+bool SuIsSupportedOs(bool on_install)
 {
+	if (MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "EnableSeLow", false, true) != 0)
+	{
+		// Force enable
+		return true;
+	}
+
 	if (MsRegReadIntEx2(REG_LOCAL_MACHINE, SL_REG_KEY_NAME, "DisableSeLow", false, true) != 0)
 	{
 		// Force disable
 		return false;
+	}
+
+	if (MsIsWindows10())
+	{
+		// Windows 10 or later are always supported.
+		return true;
+	}
+
+	if (on_install)
+	{
+		// If Microsoft Routing and Remote Access service is running,
+		// then return false.
+		if (MsIsServiceRunning("RemoteAccess"))
+		{
+			return false;
+		}
 	}
 
 	// If the Su driver is currently running,
@@ -261,11 +292,14 @@ bool SuIsSupportedOs()
 		return false;
 	}
 
-	// If Microsoft Routing and Remote Access service is running,
-	// then return false.
-	if (MsIsServiceRunning("RemoteAccess"))
+	if (on_install == false)
 	{
-		return false;
+		// If Microsoft Routing and Remote Access service is running,
+		// then return false.
+		if (MsIsServiceRunning("RemoteAccess"))
+		{
+			return false;
+		}
 	}
 
 	return true;
@@ -705,7 +739,7 @@ SU *SuInitEx(UINT wait_for_bind_complete_tick)
 	bool flag = false;
 	UINT64 giveup_tick = 0;
 
-	if (SuIsSupportedOs() == false)
+	if (SuIsSupportedOs(false) == false)
 	{
 		// Unsupported OS
 		return NULL;

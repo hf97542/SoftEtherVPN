@@ -54,10 +54,25 @@
 // AND FORUM NON CONVENIENS. PROCESS MAY BE SERVED ON EITHER PARTY IN
 // THE MANNER AUTHORIZED BY APPLICABLE LAW OR COURT RULE.
 // 
-// USE ONLY IN JAPAN. DO NOT USE IT IN OTHER COUNTRIES. IMPORTING THIS
-// SOFTWARE INTO OTHER COUNTRIES IS AT YOUR OWN RISK. SOME COUNTRIES
-// PROHIBIT ENCRYPTED COMMUNICATIONS. USING THIS SOFTWARE IN OTHER
-// COUNTRIES MIGHT BE RESTRICTED.
+// USE ONLY IN JAPAN. DO NOT USE THIS SOFTWARE IN ANOTHER COUNTRY UNLESS
+// YOU HAVE A CONFIRMATION THAT THIS SOFTWARE DOES NOT VIOLATE ANY
+// CRIMINAL LAWS OR CIVIL RIGHTS IN THAT PARTICULAR COUNTRY. USING THIS
+// SOFTWARE IN OTHER COUNTRIES IS COMPLETELY AT YOUR OWN RISK. THE
+// SOFTETHER VPN PROJECT HAS DEVELOPED AND DISTRIBUTED THIS SOFTWARE TO
+// COMPLY ONLY WITH THE JAPANESE LAWS AND EXISTING CIVIL RIGHTS INCLUDING
+// PATENTS WHICH ARE SUBJECTS APPLY IN JAPAN. OTHER COUNTRIES' LAWS OR
+// CIVIL RIGHTS ARE NONE OF OUR CONCERNS NOR RESPONSIBILITIES. WE HAVE
+// NEVER INVESTIGATED ANY CRIMINAL REGULATIONS, CIVIL LAWS OR
+// INTELLECTUAL PROPERTY RIGHTS INCLUDING PATENTS IN ANY OF OTHER 200+
+// COUNTRIES AND TERRITORIES. BY NATURE, THERE ARE 200+ REGIONS IN THE
+// WORLD, WITH DIFFERENT LAWS. IT IS IMPOSSIBLE TO VERIFY EVERY
+// COUNTRIES' LAWS, REGULATIONS AND CIVIL RIGHTS TO MAKE THE SOFTWARE
+// COMPLY WITH ALL COUNTRIES' LAWS BY THE PROJECT. EVEN IF YOU WILL BE
+// SUED BY A PRIVATE ENTITY OR BE DAMAGED BY A PUBLIC SERVANT IN YOUR
+// COUNTRY, THE DEVELOPERS OF THIS SOFTWARE WILL NEVER BE LIABLE TO
+// RECOVER OR COMPENSATE SUCH DAMAGES, CRIMINAL OR CIVIL
+// RESPONSIBILITIES. NOTE THAT THIS LINE IS NOT LICENSE RESTRICTION BUT
+// JUST A STATEMENT FOR WARNING AND DISCLAIMER.
 // 
 // 
 // SOURCE CODE CONTRIBUTION
@@ -131,6 +146,17 @@ struct DYN_VALUE
 #define	UDP_MAX_MSG_SIZE_DEFAULT	65507
 
 #define	MAX_NUM_IGNORE_ERRORS		1024
+
+#ifndef	USE_STRATEGY_LOW_MEMORY
+#define	DEFAULT_GETIP_THREAD_MAX_NUM		512
+#else	// USE_STRATEGY_LOW_MEMORY
+#define	DEFAULT_GETIP_THREAD_MAX_NUM		64
+#endif	// USE_STRATEGY_LOW_MEMORY
+
+
+// SSL logging function
+//#define	ENABLE_SSL_LOGGING
+#define	SSL_LOGGING_DIRNAME			"@ssl_log"
 
 // Private IP list file
 #define	PRIVATE_IP_TXT_FILENAME		"@private_ip.txt"
@@ -267,6 +293,7 @@ struct SOCK
 	void *Param;				// Any parameters
 	bool IPv6;					// IPv6
 	bool IsRawSocket;			// Whether it is a raw socket
+	const char *SslVersion;		// SSL version
 	UINT RawSocketIPProtocol;	// IP protocol number if it's a raw socket
 	TUBE *SendTube;				// Tube for transmission
 	TUBE *RecvTube;				// Tube for reception
@@ -284,6 +311,16 @@ struct SOCK
 	bool IsReverseAcceptedSocket;	// Whether it is a reverse socket
 	IP Reverse_MyServerGlobalIp;	// Self global IP address when using the reverse socket
 	UINT Reverse_MyServerPort;		// Self port number when using the reverse socket
+	UCHAR Ssl_Init_Async_SendAlert[2];	// Initial state of SSL send_alert
+	bool AcceptOnlyTls;			// Accept only TLS (disable SSLv3)
+
+#ifdef	ENABLE_SSL_LOGGING
+	// SSL Logging (for debug)
+	bool IsSslLoggingEnabled;	// Flag
+	IO *SslLogging_Recv;		// for Recv
+	IO *SslLogging_Send;		// for Send
+	LOCK *SslLogging_Lock;		// Locking
+#endif	// ENABLE_SSL_LOGGING
 
 	void *hAcceptEvent;			// Event for Accept
 
@@ -712,12 +749,13 @@ struct RUDP_SESSION
 };
 
 // NAT Traversal Server Information
-#define	UDP_NAT_T_SERVER_TAG				"x%c.x%c.x%c.x%c.servers.nat-traversal.softether-network.net."
-#define	UDP_NAT_T_SERVER_TAG_ALT			"x%c.x%c.x%c.x%c.servers.nat-traversal.uxcom.jp."
+#define	UDP_NAT_T_SERVER_TAG				"x%c.x%c.servers.nat-traversal.softether-network.net."
+#define	UDP_NAT_T_SERVER_TAG_ALT			"x%c.x%c.servers.nat-traversal.uxcom.jp."
 #define	UDP_NAT_T_PORT						5004
 
 // Related to processing to get the IP address of the NAT-T server
 #define	UDP_NAT_T_GET_IP_INTERVAL			DYN32(UDP_NAT_T_GET_IP_INTERVAL, (5 * 1000))		// IP address acquisition interval of NAT-T server (before success)
+#define	UDP_NAT_T_GET_IP_INTERVAL_MAX		DYN32(UDP_NAT_T_GET_IP_INTERVAL, (150 * 1000))		// IP address acquisition interval of NAT-T server (before success)
 #define	UDP_NAT_T_GET_IP_INTERVAL_AFTER		DYN32(UDP_NAT_T_GET_IP_INTERVAL_AFTER, (5 * 60 * 1000))	// IP address acquisition interval of NAT-T server (after success)
 
 // Related to process to get the private IP address of itself with making a TCP connection to the NAT-T server
@@ -780,6 +818,16 @@ typedef bool (RUDP_STACK_RPC_RECV_PROC)(RUDP_STACK *r, UDPPACKET *p);
 // Minimum time to wait for a trial to connect by ICMP and DNS in case failing to connect by TCP
 #define	SOCK_CONNECT_WAIT_FOR_ICMP_AND_DNS_AT_LEAST		5000
 
+#define	RUDP_MAX_VALIDATED_SOURCE_IP_ADDRESSES		512
+#define	RUDP_VALIDATED_SOURCE_IP_ADDRESS_EXPIRES	(RUDP_TIMEOUT * 2)
+
+// Validated Source IP Addresses for R-UDP
+struct RUDP_SOURCE_IP
+{
+	UINT64 ExpiresTick;					// Expires
+	IP ClientIP;						// Client IP address
+};
+
 // R-UDP stack
 struct RUDP_STACK
 {
@@ -816,6 +864,7 @@ struct RUDP_STACK
 	// NAT-T server related
 	bool NoNatTRegister;				// Flag not to register with the NAT-T server
 	UINT64 NatT_TranId;					// Transaction ID is used to communicate with the NAT-T server
+	UINT64 NatT_SessionKey;				// Current Session Key
 	IP NatT_IP;							// IP address of the NAT-T server
 	IP NatT_IP_Safe;					// IP address of the NAT-T server (thread-safe)
 	IP My_Private_IP;					// Private IP address of itself
@@ -832,6 +881,8 @@ struct RUDP_STACK
 	UINT LastDDnsFqdnHash;				// DNS FQDN hash value when last checked
 	volatile UINT *NatTGlobalUdpPort;	// NAT-T global UDP port
 	UCHAR RandPortId;					// Random UDP port ID
+	bool NatT_EnableSourceIpValidation;	// Enable the source IP address validation mechanism
+	LIST *NatT_SourceIpList;			// Authenticated source IP adddress list
 
 	// For Client
 	bool TargetIpAndPortInited;			// The target IP address and the port number are initialized
@@ -868,6 +919,7 @@ struct CONNECT_TCP_RUDP_PARAM
 	bool Tcp_SslNoTls;
 	LOCK *CancelLock;
 	SOCK *CancelDisconnectSock;
+	bool Tcp_InNegotiation;
 };
 
 #define	SSL_DEFAULT_CONNECT_TIMEOUT		(15 * 1000)		// SSL default timeout
@@ -926,7 +978,7 @@ struct HTTP_HEADER
 };
 
 // HTTPS server / client related string constant
-#define	DEFAULT_USER_AGENT	"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; .NET CLR 1.1.4322)"
+#define	DEFAULT_USER_AGENT	"Mozilla/5.0 (Windows NT 6.3; WOW64; rv:29.0) Gecko/20100101 Firefox/29.0"
 #define	DEFAULT_ACCEPT		"image/gif, image/x-xbitmap, image/jpeg, image/pjpeg, application/x-shockwave-flash, application/msword, application/vnd.ms-powerpoint, application/vnd.ms-excel, */*"
 #define	DEFAULT_ENCODING	"gzip, deflate"
 #define	HTTP_CONTENT_TYPE	"text/html; charset=iso-8859-1"
@@ -994,6 +1046,7 @@ void GetHttpDateStr(char *str, UINT size, UINT64 t);
 bool HttpSendForbidden(SOCK *s, char *target, char *server_id);
 bool HttpSendNotFound(SOCK *s, char *target);
 bool HttpSendNotImplemented(SOCK *s, char *method, char *target, char *version);
+bool HttpSendInvalidHostname(SOCK *s, char *method);
 bool HttpServerSend(SOCK *s, PACK *p);
 bool HttpClientSend(SOCK *s, PACK *p);
 PACK *HttpServerRecv(SOCK *s);
@@ -1061,6 +1114,9 @@ bool RUDPProcessBulkRecvPacket(RUDP_STACK *r, RUDP_SESSION *se, void *recv_data,
 UINT RUDPCalcBestMssForBulk(RUDP_STACK *r, RUDP_SESSION *se);
 bool IsIPLocalHostOrMySelf(IP *ip);
 UINT RUDPGetRandPortNumber(UCHAR rand_port_id);
+void RUDPSetSourceIpValidationForceDisable(bool b);
+bool RUDPIsIpInValidateList(RUDP_STACK *r, IP *ip);
+void RUDPAddIpToValidateList(RUDP_STACK *r, IP *ip);
 
 bool GetBestLocalIpForTarget(IP *local_ip, IP *target_ip);
 SOCK *NewUDP4ForSpecificIp(IP *target_ip, UINT port);
@@ -1307,6 +1363,7 @@ bool GetDomainName(char *name, UINT size);
 bool UnixGetDomainName(char *name, UINT size);
 void RenewDhcp();
 void AcceptInit(SOCK *s);
+void DisableGetHostNameWhenAcceptInit();
 bool CheckCipherListName(char *name);
 TOKEN_LIST *GetCipherList();
 COUNTER *GetNumTcpConnectionsCounter();
@@ -1369,6 +1426,13 @@ void RouteToStr(char *str, UINT str_size, ROUTE_ENTRY *e);
 void DebugPrintRoute(ROUTE_ENTRY *e);
 void DebugPrintRouteTable(ROUTE_TABLE *r);
 bool IsIPv6LocalNetworkAddress(IP *ip);
+UINT GetNumWaitThread();
+
+#ifdef	ENABLE_SSL_LOGGING
+void SockEnableSslLogging(SOCK *s);
+void SockWriteSslLog(SOCK *s, void *send_data, UINT send_size, void *recv_data, UINT recv_size);
+void SockCloseSslLogging(SOCK *s);
+#endif	// ENABLE_SSL_LOGGING
 
 void SocketTimeoutThread(THREAD *t, void *param);
 SOCKET_TIMEOUT_PARAM *NewSocketTimeout(SOCK *sock);
@@ -1429,6 +1493,8 @@ void IPNot4(IP *dst, IP *a);
 void IPOr4(IP *dst, IP *a, IP *b);
 void IPAnd4(IP *dst, IP *a, IP *b);
 bool IsInSameNetwork4(IP *a1, IP *a2, IP *subnet);
+bool IsInSameNetwork4Standard(IP *a1, IP *a2);
+bool IsInSameLocalNetworkToMe4(IP *a);
 
 bool ParseIpAndSubnetMask4(char *src, UINT *ip, UINT *mask);
 bool ParseIpAndSubnetMask6(char *src, IP *ip, IP *mask);
@@ -1484,6 +1550,7 @@ bool IsMyIPAddress(IP *ip);
 void FreeHostIPAddressList(LIST *o);
 void AddHostIPAddressToList(LIST *o, IP *ip);
 int CmpIpAddressList(void *p1, void *p2);
+UINT64 GetHostIPAddressListHash();
 
 UDPLISTENER *NewUdpListener(UDPLISTENER_RECV_PROC *recv_proc, void *param);
 void UdpListenerThread(THREAD *thread, void *param);
@@ -1544,6 +1611,7 @@ bool SslBioSync(SSL_BIO *b, bool sync_send, bool sync_recv);
 void SetCurrentGlobalIP(IP *ip, bool ipv6);
 bool GetCurrentGlobalIP(IP *ip, bool ipv6);
 void GetCurrentGlobalIPGuess(IP *ip, bool ipv6);
+bool IsIPAddressInSameLocalNetwork(IP *a);
 
 bool IsIPPrivate(IP *ip);
 bool IsIPMyHost(IP *ip);
@@ -1558,7 +1626,7 @@ bool IsMacAddressLocalInner(LIST *o, void *addr);
 bool IsMacAddressLocalFast(void *addr);
 void RefreshLocalMacAddressList();
 
-struct ssl_ctx_st *NewSSLCtx();
+struct ssl_ctx_st *NewSSLCtx(bool server_mode);
 void FreeSSLCtx(struct ssl_ctx_st *ctx);
 
 void SetCurrentDDnsFqdn(char *name);
@@ -1575,6 +1643,11 @@ void QueryIpThreadMain(THREAD *thread, void *param);
 QUERYIPTHREAD *NewQueryIpThread(char *hostname, UINT interval_last_ok, UINT interval_last_ng);
 bool GetQueryIpThreadResult(QUERYIPTHREAD *t, IP *ip);
 void FreeQueryIpThread(QUERYIPTHREAD *t);
+
+void SetGetIpThreadMaxNum(UINT num);
+UINT GetGetIpThreadMaxNum();
+UINT GetCurrentGetIpThreadNum();
+
 
 
 bool IsIpInStrList(IP *ip, char *ip_list);
