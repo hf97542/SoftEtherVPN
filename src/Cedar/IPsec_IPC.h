@@ -118,7 +118,6 @@
 #define	IPC_ARP_LIFETIME				(3 * 60 * 1000)
 #define	IPC_ARP_GIVEUPTIME				(1 * 1000)
 #define	IPC_DHCP_TIMEOUT				(5 * 1000)
-#define	IPC_DHCP_TIMEOUT_TOTAL_GIVEUP	(20 * 1000)
 #define	IPC_DHCP_MIN_LEASE				5
 #define	IPC_DHCP_DEFAULT_LEASE			3600
 
@@ -140,7 +139,7 @@ struct IPC_ARP
 };
 
 // DHCP release queue
-struct IPC_DHCP_RELESAE_QUEUE
+struct IPC_DHCP_RELEASE_QUEUE
 {
 	DHCP_OPTION_LIST Req;
 	UINT TranId;
@@ -164,7 +163,6 @@ struct IPC_PARAM
 	bool BridgeMode;
 	UINT Mss;
 	bool IsL3Mode;
-	bool IsOpenVPN;
 	X *ClientCertificate;
 };
 
@@ -206,7 +204,7 @@ struct IPC
 	UCHAR MacAddress[6];				// MAC address
 	UCHAR Padding[2];
 	LIST *ArpTable;						// ARP table
-	QUEUE *IPv4RecviedQueue;			// IPv4 reception queue
+	QUEUE *IPv4ReceivedQueue;			// IPv4 reception queue
 	TUBE_FLUSH_LIST *FlushList;			// Tube Flush List
 	UCHAR MsChapV2_ServerResponse[20];	// Server response
 	DHCP_CLASSLESS_ROUTE_TABLE ClasslessRoute;	// Classless routing table
@@ -256,7 +254,6 @@ DHCPV4_DATA *IPCSendDhcpRequest(IPC *ipc, IP *dest_ip, UINT tran_id, DHCP_OPTION
 BUF *IPCBuildDhcpRequest(IPC *ipc, IP *dest_ip, UINT tran_id, DHCP_OPTION_LIST *opt);
 BUF *IPCBuildDhcpRequestOptions(IPC *ipc, DHCP_OPTION_LIST *opt);
 bool IPCDhcpAllocateIP(IPC *ipc, DHCP_OPTION_LIST *opt, TUBE *discon_poll_tube);
-bool IPCDhcpAllocateIPEx(IPC *ipc, DHCP_OPTION_LIST *opt, TUBE *discon_poll_tube, bool openvpn_compatible);
 bool IPCDhcpRequestInformIP(IPC *ipc, DHCP_OPTION_LIST *opt, TUBE *discon_poll_tube, IP *client_ip);
 void IPCDhcpRenewIP(IPC *ipc, IP *dhcp_server);
 void IPCDhcpFreeIP(IPC *ipc, IP *dhcp_server);

@@ -659,26 +659,16 @@ void WriteSendFifo(SESSION *s, TCPSOCK *ts, void *data, UINT size)
 		return;
 	}
 
-	if (s->UseFastRC4)
-	{
-		Encrypt(ts->SendKey, data, data, size);
-	}
-
 	WriteFifo(ts->SendFifo, data, size);
 }
 
-// Write data to the reception FIFO (automatic deccyption)
+// Write data to the reception FIFO (automatic decryption)
 void WriteRecvFifo(SESSION *s, TCPSOCK *ts, void *data, UINT size)
 {
 	// Validate arguments
 	if (s == NULL || ts == NULL || data == NULL)
 	{
 		return;
-	}
-
-	if (s->UseFastRC4)
-	{
-		Encrypt(ts->RecvKey, data, data, size);
 	}
 
 	WriteFifo(ts->RecvFifo, data, size);
@@ -688,14 +678,14 @@ void WriteRecvFifo(SESSION *s, TCPSOCK *ts, void *data, UINT size)
 UINT TcpSockRecv(SESSION *s, TCPSOCK *ts, void *data, UINT size)
 {
 	// Receive
-	return Recv(ts->Sock, data, size, s->UseSSLDataEncryption);
+	return Recv(ts->Sock, data, size, s->UseEncrypt);
 }
 
 // TCP socket send
 UINT TcpSockSend(SESSION *s, TCPSOCK *ts, void *data, UINT size)
 {
 	// Transmission
-	return Send(ts->Sock, data, size, s->UseSSLDataEncryption);
+	return Send(ts->Sock, data, size, s->UseEncrypt);
 }
 
 // Send the data as UDP packet
@@ -892,7 +882,7 @@ void PutUDPPacketData(CONNECTION *c, void *data, UINT size)
 					block = NewBlock(tmp, size, 0);
 
 					// Insert Block
-					InsertReveicedBlockToQueue(c, block, false);
+					InsertReceivedBlockToQueue(c, block, false);
 				}
 			}
 
@@ -909,7 +899,7 @@ void PutUDPPacketData(CONNECTION *c, void *data, UINT size)
 }
 
 // Add a block to the receive queue
-void InsertReveicedBlockToQueue(CONNECTION *c, BLOCK *block, bool no_lock)
+void InsertReceivedBlockToQueue(CONNECTION *c, BLOCK *block, bool no_lock)
 {
 	SESSION *s;
 	// Validate arguments
@@ -1082,12 +1072,12 @@ void ConnectionSend(CONNECTION *c, UINT64 now)
 			for (i = 0;i < num;i++)
 			{
 				TCPSOCK *tcpsock = tcpsocks[i];
-				if (tcpsock->Sock->Connected && tcpsock->Sock->AsyncMode &&
+				if (s != NULL && tcpsock->Sock->Connected && tcpsock->Sock->AsyncMode &&
 					IS_SEND_TCP_SOCK(tcpsock))
 				{
 					// Processing of KeepAlive
 					if (now >= tcpsock->NextKeepAliveTime || tcpsock->NextKeepAliveTime == 0 ||
-						(s != NULL && s->UseUdpAcceleration && s->UdpAccel != NULL && s->UdpAccel->MyPortByNatTServerChanged))
+						(s->UseUdpAcceleration && s->UdpAccel != NULL && s->UdpAccel->MyPortByNatTServerChanged))
 					{
 						// Send the KeepAlive
 						SendKeepAlive(c, tcpsock);
@@ -1181,7 +1171,7 @@ void ConnectionSend(CONNECTION *c, UINT64 now)
 			UINT j;
 			QUEUE *q;
 
-			if (s->UdpAccel != NULL)
+			if (s != NULL && s->UdpAccel != NULL)
 			{
 				UdpAccelSetTick(s->UdpAccel, now);
 			}
@@ -1831,7 +1821,7 @@ void ConnectionReceive(CONNECTION *c, CANCEL *c1, CANCEL *c2)
 					else
 					{
 						// Add the data block to queue
-						InsertReveicedBlockToQueue(c, b, true);
+						InsertReceivedBlockToQueue(c, b, true);
 
 						if ((current_packet_index % 32) == 0)
 						{
@@ -1914,7 +1904,7 @@ void ConnectionReceive(CONNECTION *c, CANCEL *c1, CANCEL *c2)
 								else
 								{
 									// Add the data block to queue
-									InsertReveicedBlockToQueue(c, block, true);
+									InsertReceivedBlockToQueue(c, block, true);
 
 									if ((current_packet_index % 32) == 0)
 									{
@@ -1979,7 +1969,7 @@ void ConnectionReceive(CONNECTION *c, CANCEL *c1, CANCEL *c2)
 						else
 						{
 							// Add the data block to queue
-							InsertReveicedBlockToQueue(c, block, true);
+							InsertReceivedBlockToQueue(c, block, true);
 
 							if ((current_packet_index % 32) == 0)
 							{
@@ -2208,7 +2198,7 @@ DISCONNECT_THIS_TCP:
 							else
 							{
 								// Add the data block to queue
-								InsertReveicedBlockToQueue(c, block, true);
+								InsertReceivedBlockToQueue(c, block, true);
 
 								if ((current_packet_index % 32) == 0)
 								{
@@ -2477,7 +2467,7 @@ DISCONNECT_THIS_TCP:
 			else
 			{
 				// Add the data block to queue
-				InsertReveicedBlockToQueue(c, block, true);
+				InsertReceivedBlockToQueue(c, block, true);
 			}
 			num++;
 			if (num >= MAX_SEND_SOCKET_QUEUE_NUM)
@@ -2558,7 +2548,7 @@ DISCONNECT_THIS_TCP:
 			}
 			else
 			{
-				InsertReveicedBlockToQueue(c, block, true);
+				InsertReceivedBlockToQueue(c, block, true);
 			}
 
 			num++;
@@ -2675,7 +2665,7 @@ DISCONNECT_THIS_TCP:
 						}
 						else
 						{
-							InsertReveicedBlockToQueue(c, block, true);
+							InsertReceivedBlockToQueue(c, block, true);
 						}
 						num++;
 						if (num >= MAX_SEND_SOCKET_QUEUE_NUM)
@@ -2690,7 +2680,7 @@ DISCONNECT_THIS_TCP:
 		else
 		{
 			ETH *e;
-			// Bridge is stopped cureently
+			// Bridge is stopped currently
 			Select(NULL, SELECT_TIME, c1, NULL);
 
 			if (b->LastBridgeTry == 0 || (b->LastBridgeTry + BRIDGE_TRY_SPAN) <= Tick64())
@@ -2865,34 +2855,6 @@ TCPSOCK *NewTcpSock(SOCK *s)
 	SetTimeout(s, TIMEOUT_INFINITE);
 
 	return ts;
-}
-
-// Set a encryption key for the TCP socket
-void InitTcpSockRc4Key(TCPSOCK *ts, bool server_mode)
-{
-	RC4_KEY_PAIR *pair;
-	CRYPT *c1, *c2;
-	// Validate arguments
-	if (ts == NULL)
-	{
-		return;
-	}
-
-	pair = &ts->Rc4KeyPair;
-
-	c1 = NewCrypt(pair->ClientToServerKey, sizeof(pair->ClientToServerKey));
-	c2 = NewCrypt(pair->ServerToClientKey, sizeof(pair->ServerToClientKey));
-
-	if (server_mode)
-	{
-		ts->RecvKey = c1;
-		ts->SendKey = c2;
-	}
-	else
-	{
-		ts->SendKey = c1;
-		ts->RecvKey = c2;
-	}
 }
 
 // Release of TCP socket
@@ -3658,9 +3620,6 @@ CONNECTION *NewClientConnectionEx(SESSION *s, char *client_str, UINT client_ver,
 	// Server name and port number
 	StrCpy(c->ServerName, sizeof(c->ServerName), s->ClientOption->Hostname);
 	c->ServerPort = s->ClientOption->Port;
-
-	// TLS 1.0 using flag
-	c->DontUseTls1 = s->ClientOption->NoTls1;
 
 	// Create queues
 	c->ReceivedBlocks = NewQueue();

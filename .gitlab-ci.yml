@@ -1,0 +1,33 @@
+.ubuntu: &ubuntu_def
+  variables:
+    CMAKE_VERSION: 3.12.1
+  before_script:
+    - REPOSITORY="$PWD" && cd ..
+    - apt-get update && apt-get install -y dpkg-dev wget g++ gcc libncurses5-dev libreadline-dev libssl-dev make zlib1g-dev git file
+    - wget https://cmake.org/files/v${CMAKE_VERSION%.*}/cmake-${CMAKE_VERSION}.tar.gz && tar -xzf cmake-${CMAKE_VERSION}.tar.gz
+    - cd cmake-${CMAKE_VERSION} && ./bootstrap && make install
+    - cd "$REPOSITORY" && git submodule update --init --recursive
+  script:
+    - ./configure
+    - make package -C tmp
+
+bionic: 
+  <<: *ubuntu_def
+  image: ubuntu:bionic
+
+xenial:     
+  <<: *ubuntu_def
+  image: ubuntu:xenial
+
+trusty:      
+  <<: *ubuntu_def
+  image: ubuntu:trusty
+
+#
+# there's no cmake3 for 12.04
+# maybe, there's ppa ?
+#
+#precise:
+#  <<: *ubuntu_def
+#  image: ubuntu:precise
+

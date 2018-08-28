@@ -133,7 +133,7 @@ void BackupCfgWEx(CFG_RW *rw, FOLDER *f, wchar_t *original, UINT revision_number
 	wchar_t datestr[MAX_PATH];
 	SYSTEMTIME st;
 	// Validate arguments
-	if (f == NULL || filename == NULL || rw == NULL)
+	if (f == NULL || rw == NULL)
 	{
 		return;
 	}
@@ -296,7 +296,7 @@ CFG_RW *NewCfgRwEx2W(FOLDER **root, wchar_t *cfg_name, bool dont_backup, wchar_t
 			{
 				loaded_from_template = true;
 
-				goto LABEL_CONTIUNE;
+				goto LABEL_CONTINUE;
 			}
 		}
 
@@ -311,7 +311,7 @@ CFG_RW *NewCfgRwEx2W(FOLDER **root, wchar_t *cfg_name, bool dont_backup, wchar_t
 		return rw;
 	}
 
-LABEL_CONTIUNE:
+LABEL_CONTINUE:
 	rw = ZeroMalloc(sizeof(CFG_RW));
 	rw->FileNameW = CopyUniStr(cfg_name);
 	rw->FileName = CopyUniToStr(cfg_name);
@@ -1366,10 +1366,6 @@ void CfgAddItemText(BUF *b, ITEM *t, UINT depth)
 
 	// Memory release
 	Free(data);
-	if (sub != NULL)
-	{
-		Free(sub);
-	}
 }
 
 // Output the data line

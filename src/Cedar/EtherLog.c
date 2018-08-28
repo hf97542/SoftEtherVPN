@@ -240,7 +240,7 @@ UINT EcConnect(char *host, UINT port, char *password, RPC **rpc)
 
 	// Receive the random number
 	Zero(rand, sizeof(rand));
-	RecvAll(s, rand, sizeof(rand), false);
+	(void)RecvAll(s, rand, sizeof(rand), false);
 	SecurePassword(response, password_hash, rand);
 
 	// Send a response
@@ -276,16 +276,17 @@ UINT EcConnect(char *host, UINT port, char *password, RPC **rpc)
 // RPC server function
 PACK *ElRpcServer(RPC *r, char *name, PACK *p)
 {
-	EL *e = (EL *)r->Param;
+	EL *e;
 	PACK *ret;
 	UINT err;
 	bool ok;
 	// Validate arguments
-	if (r == NULL || name == NULL || p == NULL || e == NULL)
+	if (r == NULL || name == NULL || p == NULL || r->Param == NULL)
 	{
 		return NULL;
 	}
 
+	e = (EL *)r->Param;
 	ret = NewPack();
 	err = ERR_NO_ERROR;
 	ok = false;
@@ -323,7 +324,6 @@ DECLARE_SC("GetDevice", RPC_ADD_DEVICE, EcGetDevice, InRpcAddDevice, OutRpcAddDe
 DECLARE_SC_EX("EnumDevice", RPC_ENUM_DEVICE, EcEnumDevice, InRpcEnumDevice, OutRpcEnumDevice, FreeRpcEnumDevice)
 DECLARE_SC("SetPassword", RPC_SET_PASSWORD, EcSetPassword, InRpcSetPassword, OutRpcSetPassword)
 DECLARE_SC_EX("EnumAllDevice", RPC_ENUM_DEVICE, EcEnumAllDevice, InRpcEnumDevice, OutRpcEnumDevice, FreeRpcEnumDevice)
-DECLARE_SC("AddLicenseKey", RPC_TEST, EcAddLicenseKey, InRpcTest, OutRpcTest)
 DECLARE_SC("DelLicenseKey", RPC_TEST, EcDelLicenseKey, InRpcTest, OutRpcTest)
 DECLARE_SC_EX("EnumLicenseKey", RPC_ENUM_LICENSE_KEY, EcEnumLicenseKey, InRpcEnumLicenseKey, OutRpcEnumLicenseKey, FreeRpcEnumLicenseKey)
 DECLARE_SC("GetLicenseStatus", RPC_EL_LICENSE_STATUS, EcGetLicenseStatus, InRpcElLicenseStatus, OutRpcElLicenseStatus)
@@ -378,11 +378,6 @@ UINT EtGetBridgeSupport(EL *a, RPC_BRIDGE_SUPPORT *t)
 	t->IsWinPcapNeeded = IsNeedWinPcap();
 
 	return ERR_NO_ERROR;
-}
-
-// Update the status by checking the all licenses
-void ElCheckLicense(EL_LICENSE_STATUS *st, LICENSE *e)
-{
 }
 
 // Save by analyzing the status of the current license
@@ -444,7 +439,7 @@ UINT EtSetPassword(EL *e, RPC_SET_PASSWORD *t)
 // Add a device
 UINT EtAddDevice(EL *e, RPC_ADD_DEVICE *t)
 {
-	if (ElAddCaptureDevice(e, t->DeviceName, &t->LogSetting, t->NoPromiscus) == false)
+	if (ElAddCaptureDevice(e, t->DeviceName, &t->LogSetting, t->NoPromiscuous) == false)
 	{
 		return ERR_CAPTURE_DEVICE_ADD_ERROR;
 	}
@@ -485,7 +480,7 @@ UINT EtGetDevice(EL *e, RPC_ADD_DEVICE *t)
 			ret = ERR_NO_ERROR;
 
 			Copy(&t->LogSetting, &d->LogSetting, sizeof(HUB_LOG));
-			t->NoPromiscus = d->NoPromiscus;
+			t->NoPromiscuous = d->NoPromiscuous;
 		}
 	}
 	UnlockList(e->DeviceList);
@@ -583,7 +578,7 @@ void InRpcAddDevice(RPC_ADD_DEVICE *t, PACK *p)
 
 	Zero(t, sizeof(RPC_ADD_DEVICE));
 	PackGetStr(p, "DeviceName", t->DeviceName, sizeof(t->DeviceName));
-	t->NoPromiscus = PackGetInt(p, "NoPromiscus");
+	t->NoPromiscuous = PackGetInt(p, "NoPromiscuous");
 	t->LogSetting.PacketLogSwitchType = PackGetInt(p, "PacketLogSwitchType");
 
 	for (i = 0;i < NUM_PACKET_LOG;i++)
@@ -602,7 +597,7 @@ void OutRpcAddDevice(PACK *p, RPC_ADD_DEVICE *t)
 	}
 
 	PackAddStr(p, "DeviceName", t->DeviceName);
-	PackAddInt(p, "NoPromiscus", t->NoPromiscus);
+	PackAddInt(p, "NoPromiscuous", t->NoPromiscuous);
 	PackAddInt(p, "PacketLogSwitchType", t->LogSetting.PacketLogSwitchType);
 
 	for (i = 0;i < NUM_PACKET_LOG;i++)
@@ -754,7 +749,7 @@ void ElListenerProc(THREAD *thread, void *param)
 	// Receive a response
 	SecurePassword(pass1, e->HashedPassword, rand);
 	Zero(pass2, sizeof(pass2));
-	RecvAll(s, pass2, sizeof(pass2), false);
+	(void)RecvAll(s, pass2, sizeof(pass2), false);
 
 	if (Cmp(pass1, pass2, SHA1_SIZE) != 0)
 	{
@@ -969,7 +964,7 @@ bool ElDeleteCaptureDevice(EL *e, char *name)
 }
 
 // Add a capture device
-bool ElAddCaptureDevice(EL *e, char *name, HUB_LOG *log, bool no_promiscus)
+bool ElAddCaptureDevice(EL *e, char *name, HUB_LOG *log, bool no_promiscuous)
 {
 	EL_DEVICE *d, t;
 	// Validate arguments
@@ -995,7 +990,7 @@ bool ElAddCaptureDevice(EL *e, char *name, HUB_LOG *log, bool no_promiscus)
 		d = ZeroMalloc(sizeof(EL_DEVICE));
 		StrCpy(d->DeviceName, sizeof(d->DeviceName), name);
 		Copy(&d->LogSetting, log, sizeof(HUB_LOG));
-		d->NoPromiscus = no_promiscus;
+		d->NoPromiscuous = no_promiscuous;
 		d->el = e;
 		Insert(e->DeviceList, d);
 
@@ -1091,7 +1086,7 @@ void ElSaveConfigToFolder(EL *e, FOLDER *root)
 
 			f = CfgCreateFolder(devices, d->DeviceName);
 			SiWriteHubLogCfgEx(f, &d->LogSetting, true);
-			CfgAddBool(f, "NoPromiscusMode", d->NoPromiscus);
+			CfgAddBool(f, "NoPromiscuousMode", d->NoPromiscuous);
 		}
 	}
 	UnlockList(e->DeviceList);
@@ -1157,7 +1152,7 @@ void ElLoadConfigFromFolder(EL *e, FOLDER *root)
 
 					Zero(&g, sizeof(g));
 					SiLoadHubLogCfg(&g, f);
-					ElAddCaptureDevice(e, name, &g, CfgGetBool(f, "NoPromiscusMode"));
+					ElAddCaptureDevice(e, name, &g, CfgGetBool(f, "NoPromiscuousMode"));
 				}
 			}
 			FreeToken(t);
@@ -1363,20 +1358,5 @@ void ElStop()
 		el = NULL;
 	}
 	Unlock(el_lock);
-}
-
-// EL initialization
-void ElInit()
-{
-	// Lock initialization
-	el_lock = NewLock();
-}
-
-// EL release
-void ElFree()
-{
-	// Lock release
-	DeleteLock(el_lock);
-	el_lock = NULL;
 }
 

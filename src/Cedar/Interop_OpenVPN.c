@@ -124,22 +124,10 @@ static UCHAR ping_signature[] =
 	0x07, 0xed, 0x2d, 0x0a, 0x98, 0x1f, 0xc7, 0x48
 };
 
-// Set the OpenVPN over TCP disabling flag
-void OvsSetNoOpenVpnTcp(bool b)
-{
-	g_no_openvpn_tcp = b;
-}
-
 // Get the OpenVPN over TCP disabling flag
 bool OvsGetNoOpenVpnTcp()
 {
 	return g_no_openvpn_tcp;
-}
-
-// Set the OpenVPN over UDP disabling flag
-void OvsSetNoOpenVpnUdp(bool b)
-{
-	g_no_openvpn_udp = b;
 }
 
 // Get the OpenVPN over UDP disabling flag
@@ -343,13 +331,8 @@ void OvsProceccRecvPacket(OPENVPN_SERVER *s, UDPPACKET *p, UINT protocol)
 									data += sizeof(UINT);
 									size -= sizeof(UINT);
 
-									if (size >= sizeof(ping_signature) &&
-										Cmp(data, ping_signature, sizeof(ping_signature)) == 0)
-									{
-										// Ignore since a ping packet has been received
-										DoNothing();
-									}
-									else
+									if (size < sizeof(ping_signature) ||
+										Cmp(data, ping_signature, sizeof(ping_signature)) != 0)
 									{
 										// Receive a packet!!
 										if (se->Ipc != NULL)
@@ -673,6 +656,7 @@ void OvsBeginIPCAsyncConnectionIfEmpty(OPENVPN_SERVER *s, OPENVPN_SESSION *se, O
 
 	if (se->IpcAsync == NULL)
 	{
+		LIST *pi;
 		IPC_PARAM p;
 		ETHERIP_ID id;
 
@@ -702,6 +686,24 @@ void OvsBeginIPCAsyncConnectionIfEmpty(OPENVPN_SERVER *s, OPENVPN_SESSION *se, O
 			StrCpy(p.CryptName, sizeof(p.CryptName), c->CipherEncrypt->Name);
 		}
 
+		// OpenVPN sends the default gateway's MAC address,
+		// if the option --push-peer-info is enabled.
+		// It also sends all of the client's environment
+		// variables whose names start with "UV_".
+		pi = OvsParseData(c->ClientKey.PeerInfo, OPENVPN_DATA_PEERINFO);
+
+		// Check presence of custom hostname
+		if (OvsHasEntry(pi, "UV_HOSTNAME"))
+		{
+			StrCpy(p.ClientHostname, sizeof(p.ClientHostname), IniStrValue(pi, "UV_HOSTNAME"));
+		}
+		else // Use the default gateway's MAC address
+		{
+			StrCpy(p.ClientHostname, sizeof(p.ClientHostname), IniStrValue(pi, "IV_HWADDR"));
+		}
+
+		OvsFreeList(pi);
+
 		if (se->Mode == OPENVPN_MODE_L3)
 		{
 			// L3 Mode
@@ -717,8 +719,6 @@ void OvsBeginIPCAsyncConnectionIfEmpty(OPENVPN_SERVER *s, OPENVPN_SESSION *se, O
 		{
 			p.ClientCertificate = c->ClientCert.X;
 		}
-
-		p.IsOpenVPN = true;
 
 		// Calculate the MSS
 		p.Mss = OvsCalcTcpMss(s, se, c);
@@ -773,6 +773,7 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 	LIST *o;
 	BUF *b;
 	char opt_str[MAX_SIZE];
+	char *cipher_name;
 	// Validate arguments
 	if (s == NULL || se == NULL || c == NULL || data == NULL)
 	{
@@ -813,7 +814,7 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 		StrCpy(opt_str, sizeof(opt_str), s->Cedar->OpenVPNDefaultClientOption);
 	}
 
-	o = OvsParseOptions(opt_str);
+	o = OvsParseData(opt_str, OPENVPN_DATA_OPTIONS);
 
 	if (se->Mode == OPENVPN_MODE_UNKNOWN)
 	{
@@ -875,8 +876,9 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 	}
 
 	// Encryption algorithm
-	c->CipherEncrypt = OvsGetCipher(IniStrValue(o, "cipher"));
-	c->CipherDecrypt = NewCipher(c->CipherEncrypt->Name);
+	cipher_name = IniStrValue(o, "cipher");
+	c->CipherEncrypt = OvsGetCipher(cipher_name);
+	c->CipherDecrypt = OvsGetCipher(cipher_name);
 
 	// Hash algorithm
 	c->MdSend = OvsGetMd(IniStrValue(o, "auth"));
@@ -913,7 +915,16 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 	SetMdKey(c->MdRecv, c->ExpansionKey + 64, c->MdRecv->Size);
 	SetMdKey(c->MdSend, c->ExpansionKey + 192, c->MdSend->Size);
 
-	OvsFreeOptions(o);
+	OvsFreeList(o);
+
+	// We pass the cipher name sent from the OpenVPN client, unless it's a different cipher, to prevent a message such as:
+	// WARNING: 'cipher' is used inconsistently, local='cipher AES-128-GCM', remote='cipher aes-128-gcm'
+	// It happens because OpenVPN uses "strcmp()" to compare the local and remote parameters:
+	// https://github.com/OpenVPN/openvpn/blob/a6fd48ba36ede465b0905a95568c3ec0d425ca71/src/openvpn/options.c#L3819-L3831
+	if (StrCmpi(cipher_name, c->CipherEncrypt->Name) != 0)
+	{
+		cipher_name = c->CipherEncrypt->Name;
+	}
 
 	// Generate the response option string
 	Format(c->ServerKey.OptionString, sizeof(c->ServerKey.OptionString),
@@ -923,7 +934,7 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 		se->LinkMtu,
 		se->TunMtu,
 		c->Proto,
-		c->CipherEncrypt->Name, c->MdSend->Name, c->CipherEncrypt->KeySize * 8);
+		cipher_name, c->MdSend->Name, c->CipherEncrypt->KeySize * 8);
 	Debug("Building OptionStr: %s\n", c->ServerKey.OptionString);
 
 	OvsLog(s, se, c, "LO_OPTION_STR_SEND", c->ServerKey.OptionString);
@@ -934,9 +945,15 @@ CIPHER *OvsGetCipher(char *name)
 {
 	CIPHER *c = NULL;
 
-	if (IsEmptyStr(name) == false && IsStrInStrTokenList(OPENVPN_CIPHER_LIST, name, NULL, false))
+	// OpenVPN sends the cipher name in uppercase, even if it's not standard,
+	// thus we have to convert it to lowercase for EVP_get_cipherbyname().
+	char lowercase_name[MAX_SIZE];
+	StrCpy(lowercase_name, sizeof(lowercase_name), name);
+	StrLower(lowercase_name);
+
+	if (IsEmptyStr(lowercase_name) == false)
 	{
-		c = NewCipher(name);
+		c = NewCipher(lowercase_name);
 	}
 
 	if (c == NULL)
@@ -952,7 +969,7 @@ MD *OvsGetMd(char *name)
 {
 	MD *m = NULL;
 
-	if (IsEmptyStr(name) == false && IsStrInStrTokenList(OPENVPN_MD_LIST, name, NULL, false))
+	if (IsEmptyStr(name) == false)
 	{
 		m = NewMd(name);
 	}
@@ -965,13 +982,13 @@ MD *OvsGetMd(char *name)
 	return m;
 }
 
-// Parse the option string
-LIST *OvsParseOptions(char *str)
+// Parse data string
+LIST *OvsParseData(char *str, int type)
 {
 	LIST *o = NewListFast(NULL);
 	TOKEN_LIST *t;
 
-	t = ParseTokenWithoutNullStr(str, ",");
+	t = ParseTokenWithoutNullStr(str, type == OPENVPN_DATA_OPTIONS ? "," : "\n");
 	if (t != NULL)
 	{
 		UINT i;
@@ -983,7 +1000,7 @@ LIST *OvsParseOptions(char *str)
 			char *line = t->Token[i];
 			Trim(line);
 
-			if (GetKeyAndValue(line, key, sizeof(key), value, sizeof(value), " \t"))
+			if (GetKeyAndValue(line, key, sizeof(key), value, sizeof(value), type == OPENVPN_DATA_OPTIONS ? " \t" : "=\t"))
 			{
 				INI_ENTRY *e = ZeroMalloc(sizeof(INI_ENTRY));
 
@@ -1001,7 +1018,7 @@ LIST *OvsParseOptions(char *str)
 }
 
 // Release the option list
-void OvsFreeOptions(LIST *o)
+void OvsFreeList(LIST *o)
 {
 	// Validate arguments
 	if (o == NULL)
@@ -1012,46 +1029,8 @@ void OvsFreeOptions(LIST *o)
 	FreeIni(o);
 }
 
-// Create an Option List
-LIST *OvsNewOptions()
-{
-	return NewListFast(NULL);
-}
-
-// Add a value to the option list
-void OvsAddOption(LIST *o, char *key, char *value)
-{
-	INI_ENTRY *e;
-	// Validate arguments
-	if (o == NULL)
-	{
-		return;
-	}
-
-	e = GetIniEntry(o, key);
-	if (e != NULL)
-	{
-		// Overwrite existing keys
-		Free(e->Key);
-		e->Key = CopyStr(key);
-
-		Free(e->Value);
-		e->Value = CopyStr(value);
-	}
-	else
-	{
-		// Create a new key
-		e = ZeroMalloc(sizeof(INI_ENTRY));
-
-		e->Key = CopyStr(key);
-		e->Value = CopyStr(value);
-
-		Add(o, e);
-	}
-}
-
 // Confirm whether there is specified option key string
-bool OvsHasOption(LIST *o, char *key)
+bool OvsHasEntry(LIST *o, char *key)
 {
 	// Validate arguments
 	if (o == NULL || key == NULL)
@@ -1180,9 +1159,12 @@ UINT OvsParseKeyMethod2(OPENVPN_KEY_METHOD_2 *ret, UCHAR *data, UINT size, bool 
 						// String
 						if (OvsReadStringFromBuf(b, ret->OptionString, sizeof(ret->OptionString)) &&
 							OvsReadStringFromBuf(b, ret->Username, sizeof(ret->Username)) &&
-							OvsReadStringFromBuf(b, ret->Password, sizeof(ret->Password)) &&
-							OvsReadStringFromBuf(b, ret->PeerInfo, sizeof(ret->PeerInfo)))
-						{
+							OvsReadStringFromBuf(b, ret->Password, sizeof(ret->Password)))
+							{
+								if (!OvsReadStringFromBuf(b, ret->PeerInfo, sizeof(ret->PeerInfo)))
+								{
+									Zero(ret->PeerInfo, sizeof(ret->PeerInfo));
+								}
 							read_size = b->Current;
 						}
 					}
@@ -1589,11 +1571,6 @@ OPENVPN_PACKET *OvsParsePacket(UCHAR *data, UINT size)
 
 	ret = ZeroMalloc(sizeof(OPENVPN_PACKET));
 
-	// OpCode + KeyID
-	if (size < 1)
-	{
-		goto LABEL_ERROR;
-	}
 	uc = *((UCHAR *)data);
 	data++;
 	size--;
@@ -2005,9 +1982,6 @@ void OvsRecvPacket(OPENVPN_SERVER *s, LIST *recv_packet_list, UINT protocol)
 									// if the L3 mode to the option character string
 									DHCP_OPTION_LIST *cao = &se->IpcAsync->L3ClientAddressOption;
 									char ip_client[64];
-									char ip_tunnel_endpoint[64];
-									UINT ip_tunnel_endpoint_32;
-									char ip_network[64];
 									char ip_subnet_mask[64];
 									char ip_dns1[64];
 									char ip_dns2[64];
@@ -2024,25 +1998,17 @@ void OvsRecvPacket(OPENVPN_SERVER *s, LIST *recv_packet_list, UINT protocol)
 									IPToStr32(ip_client, sizeof(ip_client),
 										cao->ClientAddress);
 
-									// Generate a virtual gateway address to be passed to the OpenVPN
-									ip_tunnel_endpoint_32 = Endian32(cao->ClientAddress);
-									ip_tunnel_endpoint_32++;
-									ip_tunnel_endpoint_32 = Endian32(ip_tunnel_endpoint_32);
-									IPToStr32(ip_tunnel_endpoint, sizeof(ip_tunnel_endpoint), ip_tunnel_endpoint_32);
-
-									// Create a subnet information for the LAN
-									IPToStr32(ip_network, sizeof(ip_network),
-										GetNetworkAddress(cao->ClientAddress,
-										cao->SubnetMask));
-
 									IPToStr32(ip_subnet_mask, sizeof(ip_subnet_mask),
 										cao->SubnetMask);
 
 									Format(l3_options, sizeof(l3_options),
+										",topology subnet");
+									StrCat(option_str, sizeof(option_str), l3_options);
+
+									Format(l3_options, sizeof(l3_options),
 										",ifconfig %s %s",
-//										",ifconfig %s %s,route %s %s %s 1",
-										ip_client, ip_tunnel_endpoint, ip_network, ip_subnet_mask,
-										ip_tunnel_endpoint);
+										ip_client,
+										ip_subnet_mask);
 									StrCat(option_str, sizeof(option_str), l3_options);
 
 									// Domain name
@@ -2104,11 +2070,13 @@ void OvsRecvPacket(OPENVPN_SERVER *s, LIST *recv_packet_list, UINT protocol)
 									// Default gateway
 									if (cao->Gateway != 0)
 									{
+										char ip_str[64];
+										IPToStr32(ip_str, sizeof(ip_str), cao->Gateway);
 										Format(l3_options, sizeof(l3_options),
-											",route-gateway %s,redirect-gateway def1", ip_tunnel_endpoint);
+											",route-gateway %s,redirect-gateway def1", ip_str);
 										StrCat(option_str, sizeof(option_str), l3_options);
 
-										IPToStr32(ip_defgw, sizeof(ip_defgw), cao->Gateway);
+										StrCpy(ip_defgw, sizeof(ip_defgw), ip_str);
 									}
 									else
 									{
@@ -2563,36 +2531,6 @@ int OvsCompareSessionList(void *p1, void *p2)
 	return 0;
 }
 
-// Identify whether the IP address is compatible to the tun device of OpenVPN
-bool OvsIsCompatibleL3IP(UINT ip)
-{
-	IP p;
-
-	UINTToIP(&p, ip);
-	if ((p.addr[3] % 4) == 1)
-	{
-		return true;
-	}
-
-	return false;
-}
-
-// Get an IP address that is compatible to tun device of the OpenVPN after the specified IP address
-UINT OvsGetCompatibleL3IPNext(UINT ip)
-{
-	ip = Endian32(ip);
-
-	while (true)
-	{
-		if (OvsIsCompatibleL3IP(Endian32(ip)))
-		{
-			return Endian32(ip);
-		}
-
-		ip++;
-	}
-}
-
 // Create a new OpenVPN server
 OPENVPN_SERVER *NewOpenVpnServer(CEDAR *cedar, INTERRUPT_MANAGER *interrupt, SOCK_EVENT *sock_event)
 {
@@ -2679,7 +2617,6 @@ void FreeOpenVpnServer(OPENVPN_SERVER *s)
 void OpenVpnServerUdpListenerProc(UDPLISTENER *u, LIST *packet_list)
 {
 	OPENVPN_SERVER_UDP *us;
-	UINT64 now = Tick64();
 	// Validate arguments
 	if (u == NULL || packet_list == NULL)
 	{

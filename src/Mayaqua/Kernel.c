@@ -171,7 +171,6 @@ L"- - $ : : $ Sun Mon Tue Wed Thu Fri Sat : : : $ (None)";
 
 static LOCALE current_locale;
 LOCK *tick_manual_lock = NULL;
-UINT g_zero = 0;
 
 #define MONSPERYEAR 12
 #define DAYSPERNYEAR 365
@@ -423,7 +422,7 @@ void AddThreadToThreadList(LIST *o, THREAD *t)
 }
 
 // Maintain thread list
-void MainteThreadList(LIST *o)
+void MaintainThreadList(LIST *o)
 {
 	UINT i;
 	LIST *delete_list = NULL;
@@ -1166,12 +1165,6 @@ void SetThreadName(UINT thread_id, char *name, void *param)
 #endif	// OS_WIN32
 }
 
-// Do Nothing
-UINT DoNothing()
-{
-	return g_zero;
-}
-
 // Thread creation (pool)
 THREAD *NewThreadNamed(THREAD_PROC *thread_proc, void *param, char *name)
 {
@@ -1183,11 +1176,6 @@ THREAD *NewThreadNamed(THREAD_PROC *thread_proc, void *param, char *name)
 	if (thread_proc == NULL)
 	{
 		return NULL;
-	}
-
-	if (IsTrackingEnabled() == false)
-	{
-		DoNothing();
 	}
 
 	Inc(thread_count);
@@ -2137,6 +2125,15 @@ UINT64 SystemToUINT64(SYSTEMTIME *st)
 	}
 
 	time = SystemToTime(st);
+
+	//For times before 1970-01-01, clamp to the minimum
+	//because we have to return an unsigned integer.
+	//This is less wrong than casting it to UINT64
+	//and returning a time far in the future.
+	//For some reason we subtract 9 hours below, so
+	//account for that here.
+	if( time < 32400000LL ) return 0;
+
 	sec64 = (UINT64)time * (UINT64)1000;
 	sec64 += st->wMilliseconds;
 

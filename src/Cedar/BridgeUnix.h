@@ -201,7 +201,7 @@ ETH *OpenEth(char *name, bool local, bool tapmode, char *tapaddr);
 ETH *OpenEthLinux(char *name, bool local, bool tapmode, char *tapaddr);
 ETH *OpenEthSolaris(char *name, bool local, bool tapmode, char *tapaddr);
 ETH *OpenEthPcap(char *name, bool local, bool tapmode, char *tapaddr);
-bool ParseUnixEthDeviceName(char *dst_devname, UINT dst_devname_size, UINT *dst_devid, char *src_name);
+bool ParseUnixEthDeviceName(char *dst_devname, UINT dst_devname_size, char *src_name);
 void CloseEth(ETH *e);
 CANCEL *EthGetCancel(ETH *e);
 UINT EthGetPacket(ETH *e, void **data);
@@ -227,7 +227,6 @@ void EthSendIpPacketInnerIpRaw(ETH *e, void *data, UINT size, USHORT protocol);
 
 #ifdef	UNIX_SOLARIS
 // Function prototype for Solaris
-bool DlipAttatchRequest(int fd, UINT devid);
 bool DlipReceiveAck(int fd);
 bool DlipPromiscuous(int fd, UINT level);
 bool DlipBindRequest(int fd);

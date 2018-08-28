@@ -1265,7 +1265,6 @@ bool ServerAccept(CONNECTION *c)
 	char groupname[MAX_SIZE];
 	UCHAR session_key[SHA1_SIZE];
 	UCHAR ticket[SHA1_SIZE];
-	RC4_KEY_PAIR key_pair;
 	UINT authtype;
 	POLICY *policy;
 	UINT assigned_vlan_id = 0;
@@ -1284,7 +1283,6 @@ bool ServerAccept(CONNECTION *c)
 	IP udp_acceleration_client_ip;
 	UCHAR udp_acceleration_client_key[UDP_ACCELERATION_COMMON_KEY_SIZE];
 	UINT udp_acceleration_client_port;
-	bool use_fast_rc4;
 	bool admin_mode = false;
 	UINT direction;
 	UINT max_connection;
@@ -1491,8 +1489,8 @@ bool ServerAccept(CONNECTION *c)
 		{
 			StrCpy(c->ClientStr, sizeof(c->ClientStr), "Unknown");
 		}
-		c->ServerVer = CEDAR_VER;
-		c->ServerBuild = CEDAR_BUILD;
+		c->ServerVer = GetCedarVersionNumber();
+		c->ServerBuild = CEDAR_VERSION_BUILD;
 
 		// Get the NODE_INFO
 		Zero(&node, sizeof(node));
@@ -1576,7 +1574,7 @@ bool ServerAccept(CONNECTION *c)
 
 		if (hub->ForceDisableComm)
 		{
-			// Commnunication function is disabled
+			// Communication function is disabled
 			FreePack(p);
 			c->Err = ERR_SERVER_CANT_ACCEPT;
 			error_detail = "ERR_COMM_DISABLED";
@@ -1643,7 +1641,6 @@ bool ServerAccept(CONNECTION *c)
 			use_compress = PackGetInt(p, "use_compress") == 0 ? false : true;
 			max_connection = PackGetInt(p, "max_connection");
 			half_connection = PackGetInt(p, "half_connection") == 0 ? false : true;
-			use_fast_rc4 = PackGetInt(p, "use_fast_rc4") == 0 ? false : true;
 			qos = PackGetInt(p, "qos") ? true : false;
 			client_id = PackGetInt(p, "client_id");
 			adjust_mss = PackGetInt(p, "adjust_mss");
@@ -1851,7 +1848,7 @@ bool ServerAccept(CONNECTION *c)
 						Add(o, "p");
 						Add(o, "guest");
 						Add(o, "anony");
-						Add(o, "anonymouse");
+						Add(o, "anonymous");
 						Add(o, "password");
 						Add(o, "passwd");
 						Add(o, "pass");
@@ -2948,12 +2945,9 @@ bool ServerAccept(CONNECTION *c)
 			// VLAN ID
 			if (assigned_vlan_id != 0)
 			{
-				if (policy != NULL)
+				if (policy->VLanId == 0)
 				{
-					if (policy->VLanId == 0)
-					{
-						policy->VLanId = assigned_vlan_id;
-					}
+					policy->VLanId = assigned_vlan_id;
 				}
 			}
 
@@ -3137,21 +3131,12 @@ bool ServerAccept(CONNECTION *c)
 			// Set the parameters
 			s->MaxConnection = max_connection;
 			s->UseEncrypt = use_encrypt;
-			if (s->UseEncrypt && use_fast_rc4)
-			{
-				s->UseFastRC4 = use_fast_rc4;
-			}
 			s->UseCompress = use_compress;
 			s->HalfConnection = half_connection;
 			s->Timeout = timeout;
 			s->QoS = qos;
 			s->NoReconnectToSession = no_reconnect_to_session;
-
-
-			if (policy != NULL)
-			{
-				s->VLanId = policy->VLanId;
-			}
+			s->VLanId = policy->VLanId;
 
 			// User name
 			s->Username = CopyStr(username);
@@ -3302,26 +3287,6 @@ bool ServerAccept(CONNECTION *c)
 
 		Free(msg);
 
-
-		if (s->UseFastRC4)
-		{
-			// Generate a RC4 key pair
-			GenerateRC4KeyPair(&key_pair);
-
-			// Add to Welcome packet
-			PackAddData(p, "rc4_key_client_to_server", key_pair.ClientToServerKey, sizeof(key_pair.ClientToServerKey));
-			PackAddData(p, "rc4_key_server_to_client", key_pair.ServerToClientKey, sizeof(key_pair.ServerToClientKey));
-			{
-				char key1[64], key2[64];
-				BinToStr(key1, sizeof(key1), key_pair.ClientToServerKey, 16);
-				BinToStr(key2, sizeof(key2), key_pair.ServerToClientKey, 16);
-				Debug(
-					"Client to Server Key: %s\n"
-					"Server to Client Key: %s\n",
-					key1, key2);
-			}
-		}
-
 		// Brand string for the connection limit
 		{
 			char *branded_cfroms = _SS("BRANDED_C_FROM_S");
@@ -3359,24 +3324,6 @@ bool ServerAccept(CONNECTION *c)
 			// The direction of the first socket is client to server
 			TCPSOCK *ts = (TCPSOCK *)LIST_DATA(c->Tcp->TcpSockList, 0);
 			ts->Direction = TCP_CLIENT_TO_SERVER;
-		}
-
-		if (s->UseFastRC4)
-		{
-			// Set the RC4 key information to the first TCP connection
-			TCPSOCK *ts = (TCPSOCK *)LIST_DATA(c->Tcp->TcpSockList, 0);
-			Copy(&ts->Rc4KeyPair, &key_pair, sizeof(RC4_KEY_PAIR));
-
-			InitTcpSockRc4Key(ts, true);
-		}
-
-		if (s->UseEncrypt && s->UseFastRC4 == false)
-		{
-			s->UseSSLDataEncryption = true;
-		}
-		else
-		{
-			s->UseSSLDataEncryption = false;
 		}
 
 		if (s->Hub->Type == HUB_TYPE_FARM_DYNAMIC && s->Cedar->Server != NULL && s->Cedar->Server->ServerType == SERVER_TYPE_FARM_CONTROLLER)
@@ -3544,12 +3491,6 @@ bool ServerAccept(CONNECTION *c)
 			goto CLEANUP;
 		}
 
-		// Generate a high-speed RC4 encryption key
-		if (s->UseFastRC4)
-		{
-			GenerateRC4KeyPair(&key_pair);
-		}
-
 		// Add the socket of this connection to the connection list of the session (TCP)
 		sock = c->FirstSock;
 		ts = NewTcpSock(sock);
@@ -3589,33 +3530,9 @@ bool ServerAccept(CONNECTION *c)
 		}
 		UnlockList(s->Connection->Tcp->TcpSockList);
 
-		if (s->UseFastRC4)
-		{
-			// Set the RC4 key information
-			Copy(&ts->Rc4KeyPair, &key_pair, sizeof(RC4_KEY_PAIR));
-
-			InitTcpSockRc4Key(ts, true);
-		}
-
 		// Return a success result
 		p = PackError(ERR_NO_ERROR);
 		PackAddInt(p, "direction", direction);
-
-		if (s->UseFastRC4)
-		{
-			// Add a RC4 key information
-			PackAddData(p, "rc4_key_client_to_server", key_pair.ClientToServerKey, sizeof(key_pair.ClientToServerKey));
-			PackAddData(p, "rc4_key_server_to_client", key_pair.ServerToClientKey, sizeof(key_pair.ServerToClientKey));
-			{
-				char key1[64], key2[64];
-				BinToStr(key1, sizeof(key1), key_pair.ClientToServerKey, 16);
-				BinToStr(key2, sizeof(key2), key_pair.ServerToClientKey, 16);
-				Debug(
-					"Client to Server Key: %s\n"
-					"Server to Client Key: %s\n",
-					key1, key2);
-			}
-		}
 
 		HttpServerSend(c->FirstSock, p);
 		FreePack(p);
@@ -4003,7 +3920,7 @@ SOCK *ClientAdditionalConnectToServer(CONNECTION *c)
 	}
 
 	// Socket connection
-	s = ClientConnectGetSocket(c, true, (c->DontUseTls1 ? false : true));
+	s = ClientConnectGetSocket(c, true);
 	if (s == NULL)
 	{
 		// Connection failure
@@ -4038,7 +3955,7 @@ SOCK *ClientAdditionalConnectToServer(CONNECTION *c)
 	SetTimeout(s, CONNECTING_TIMEOUT);
 
 	// Start the SSL communication
-	if (StartSSLEx(s, NULL, NULL, (c->DontUseTls1 ? false : true), 0, c->ServerName) == false)
+	if (StartSSLEx(s, NULL, NULL, 0, c->ServerName) == false)
 	{
 		// SSL communication failure
 		Disconnect(s);
@@ -4353,7 +4270,7 @@ bool ClientAdditionalConnect(CONNECTION *c, THREAD *t)
 	TCPSOCK *ts;
 	UINT err;
 	UINT direction;
-	RC4_KEY_PAIR key_pair;
+
 	// Validate arguments
 	if (c == NULL)
 	{
@@ -4417,28 +4334,6 @@ bool ClientAdditionalConnect(CONNECTION *c, THREAD *t)
 	err = GetErrorFromPack(p);
 	direction = PackGetInt(p, "direction");
 
-	if (c->Session->UseFastRC4)
-	{
-		// Get the RC4 key information
-		if (PackGetDataSize(p, "rc4_key_client_to_server") == 16)
-		{
-			PackGetData(p, "rc4_key_client_to_server", key_pair.ClientToServerKey);
-		}
-		if (PackGetDataSize(p, "rc4_key_server_to_client") == 16)
-		{
-			PackGetData(p, "rc4_key_server_to_client", key_pair.ServerToClientKey);
-		}
-		{
-			char key1[64], key2[64];
-			BinToStr(key1, sizeof(key1), key_pair.ClientToServerKey, 16);
-			BinToStr(key2, sizeof(key2), key_pair.ServerToClientKey, 16);
-			Debug(
-				"Client to Server Key: %s\n"
-				"Server to Client Key: %s\n",
-				key1, key2);
-		}
-	}
-
 	FreePack(p);
 	p = NULL;
 
@@ -4481,14 +4376,6 @@ bool ClientAdditionalConnect(CONNECTION *c, THREAD *t)
 		Debug("New Half Connection: %s\n",
 			direction == TCP_SERVER_TO_CLIENT ? "TCP_SERVER_TO_CLIENT" : "TCP_CLIENT_TO_SERVER"
 			);
-	}
-
-	if (c->Session->UseFastRC4)
-	{
-		// Set the RC4 encryption key
-		Copy(&ts->Rc4KeyPair, &key_pair, sizeof(RC4_KEY_PAIR));
-
-		InitTcpSockRc4Key(ts, false);
 	}
 
 	// Issue the Cancel to the session
@@ -4626,7 +4513,7 @@ void ClientCheckServerCertThread(THREAD *thread, void *param)
 	NoticeThreadInit(thread);
 
 	// Query for the selection to the user
-	p->Ok = p->CheckCertProc(p->Connection->Session, p->Connection, p->ServerX, &p->Exipred);
+	p->Ok = p->CheckCertProc(p->Connection->Session, p->Connection, p->ServerX, &p->Expired);
 	p->UserSelected = true;
 }
 
@@ -4772,7 +4659,7 @@ bool ClientCheckServerCert(CONNECTION *c, bool *expired)
 
 	if (expired != NULL)
 	{
-		*expired = p->Exipred;
+		*expired = p->Expired;
 	}
 
 	ret = p->Ok;
@@ -4796,7 +4683,6 @@ bool ClientConnect(CONNECTION *c)
 	char session_name[MAX_SESSION_NAME_LEN + 1];
 	char connection_name[MAX_CONNECTION_NAME_LEN + 1];
 	UCHAR session_key[SHA1_SIZE];
-	RC4_KEY_PAIR key_pair;
 	POLICY *policy;
 	bool expired = false;
 	IP server_ip;
@@ -4924,7 +4810,8 @@ REDIRECTED:
 			c->Err = ERR_SERVER_CERT_EXPIRES;
 		}
 
-		if (c->Session->LinkModeClient == false && c->Err == ERR_CERT_NOT_TRUSTED)
+		if (c->Session->LinkModeClient == false && c->Err == ERR_CERT_NOT_TRUSTED
+			&& (c->Session->Account == NULL || ! c->Session->Account->RetryOnServerCert))
 		{
 			c->Session->ForceStopFlag = true;
 		}
@@ -5144,10 +5031,6 @@ REDIRECTED:
 		c->Session->UseCompress = PackGetInt(p, "use_compress") == 0 ? false : true;
 		c->Session->UseEncrypt = PackGetInt(p, "use_encrypt") == 0 ? false : true;
 		c->Session->NoSendSignature = PackGetBool(p, "no_send_signature");
-		if (c->Session->UseEncrypt)
-		{
-			c->Session->UseFastRC4 = PackGetInt(p, "use_fast_rc4") == 0 ? false : true;
-		}
 		c->Session->HalfConnection = PackGetInt(p, "half_connection") == 0 ? false : true;
 		c->Session->IsAzureSession = PackGetInt(p, "is_azure_session") == 0 ? false : true;
 		c->Session->Timeout = PackGetInt(p, "timeout");
@@ -5207,28 +5090,6 @@ REDIRECTED:
 			if (PackGetDataSize(p, "udp_recv_key") == sizeof(c->Session->UdpRecvKey))
 			{
 				PackGetData(p, "udp_recv_key", c->Session->UdpRecvKey);
-			}
-		}
-
-		if (c->Session->UseFastRC4)
-		{
-			// Get the RC4 key information
-			if (PackGetDataSize(p, "rc4_key_client_to_server") == 16)
-			{
-				PackGetData(p, "rc4_key_client_to_server", key_pair.ClientToServerKey);
-			}
-			if (PackGetDataSize(p, "rc4_key_server_to_client") == 16)
-			{
-				PackGetData(p, "rc4_key_server_to_client", key_pair.ServerToClientKey);
-			}
-			{
-				char key1[64], key2[64];
-				BinToStr(key1, sizeof(key1), key_pair.ClientToServerKey, 16);
-				BinToStr(key2, sizeof(key2), key_pair.ServerToClientKey, 16);
-				Debug(
-					"Client to Server Key: %s\n"
-					"Server to Client Key: %s\n",
-					key1, key2);
 			}
 		}
 
@@ -5393,6 +5254,14 @@ REDIRECTED:
 
 	PrintStatus(sess, _UU("STATUS_9"));
 
+#ifdef OS_UNIX
+	// Set TUN up if session has NicDownOnDisconnect set
+	if (c->Session->NicDownOnDisconnect != NULL)
+	{
+		UnixVLanSetState(c->Session->ClientOption->DeviceName, true);
+	}
+#endif
+
 	// Shift the connection to the tunneling mode
 	StartTunnelingMode(c);
 	s = NULL;
@@ -5402,25 +5271,6 @@ REDIRECTED:
 		// Processing in the case of half-connection
 		TCPSOCK *ts = (TCPSOCK *)LIST_DATA(c->Tcp->TcpSockList, 0);
 		ts->Direction = TCP_CLIENT_TO_SERVER;
-	}
-
-	if (c->Session->UseFastRC4)
-	{
-		// Set the high-speed RC4 encryption key
-		TCPSOCK *ts = (TCPSOCK *)LIST_DATA(c->Tcp->TcpSockList, 0);
-		Copy(&ts->Rc4KeyPair, &key_pair, sizeof(key_pair));
-
-		InitTcpSockRc4Key(ts, false);
-	}
-
-	// SSL encryption flag
-	if (c->Session->UseEncrypt && c->Session->UseFastRC4 == false)
-	{
-		c->Session->UseSSLDataEncryption = true;
-	}
-	else
-	{
-		c->Session->UseSSLDataEncryption = false;
 	}
 
 	PrintStatus(sess, L"free");
@@ -5524,7 +5374,6 @@ PACK *PackWelcome(SESSION *s)
 	// Parameters
 	PackAddInt(p, "max_connection", s->MaxConnection);
 	PackAddInt(p, "use_encrypt", s->UseEncrypt == false ? 0 : 1);
-	PackAddInt(p, "use_fast_rc4", s->UseFastRC4 == false ? 0 : 1);
 	PackAddInt(p, "use_compress", s->UseCompress == false ? 0 : 1);
 	PackAddInt(p, "half_connection", s->HalfConnection == false ? 0 : 1);
 	PackAddInt(p, "timeout", s->Timeout);
@@ -5796,7 +5645,7 @@ void ClientUploadNoop(CONNECTION *c)
 
 	p = PackError(0);
 	PackAddInt(p, "noop", 1);
-	HttpClientSend(c->FirstSock, p);
+	(void)HttpClientSend(c->FirstSock, p);
 	FreePack(p);
 
 	p = HttpClientRecv(c->FirstSock);
@@ -5929,8 +5778,6 @@ bool ClientUploadAuth(CONNECTION *c)
 	PackAddInt(p, "max_connection", o->MaxConnection);
 	// Flag to use of cryptography
 	PackAddInt(p, "use_encrypt", o->UseEncrypt == false ? 0 : 1);
-	// Fast encryption using flag
-	//	PackAddInt(p, "use_fast_rc4", o->UseFastRC4 == false ? 0 : 1);
 	// Data compression flag
 	PackAddInt(p, "use_compress", o->UseCompress == false ? 0 : 1);
 	// Half connection flag
@@ -6095,14 +5942,11 @@ bool ServerDownloadSignature(CONNECTION *c, char **error_detail_str)
 	UINT num = 0, max = 19;
 	SERVER *server;
 	char *vpn_http_target = HTTP_VPN_TARGET2;
-	bool check_hostname = false;
 	// Validate arguments
 	if (c == NULL)
 	{
 		return false;
 	}
-
-
 
 	server = c->Cedar->Server;
 
@@ -6129,33 +5973,6 @@ bool ServerDownloadSignature(CONNECTION *c, char **error_detail_str)
 			c->Err = ERR_CLIENT_IS_NOT_VPN;
 			return false;
 		}
-
-		if (check_hostname && (StrCmpi(h->Version, "HTTP/1.1") == 0 || StrCmpi(h->Version, "HTTP/1.2") == 0))
-		{
-			HTTP_VALUE *v;
-			char hostname[64];
-
-			Zero(hostname, sizeof(hostname));
-
-			v = GetHttpValue(h, "Host");
-			if (v != NULL)
-			{
-				StrCpy(hostname, sizeof(hostname), v->Data);
-			}
-
-			if (IsEmptyStr(hostname))
-			{
-				// Invalid hostname
-				HttpSendInvalidHostname(s, h->Target);
-				FreeHttpHeader(h);
-				c->Err = ERR_CLIENT_IS_NOT_VPN;
-				*error_detail_str = "Invalid_hostname";
-				return false;
-			}
-		}
-
-
-
 
 		// Interpret
 		if (StrCmpi(h->Method, "POST") == 0)
@@ -6265,51 +6082,12 @@ bool ServerDownloadSignature(CONNECTION *c, char **error_detail_str)
 				{
 					// Root directory
 					SERVER *s = c->Cedar->Server;
-					bool is_free = false;
 
 					*error_detail_str = "HTTP_ROOT";
 
 					{
-						if (is_free == false)
-						{
-							// Other than free version
-							HttpSendForbidden(c->FirstSock, h->Target, "");
-						}
-						else
-						{
-							// Free version
-							BUF *b = ReadDump("|free.htm");
-
-							if (b != NULL)
-							{
-								char *src = ZeroMalloc(b->Size + 1);
-								UINT dst_size = b->Size * 2 + 64;
-								char *dst = ZeroMalloc(dst_size);
-								char host[MAX_PATH];
-								char portstr[64];
-
-								GetMachineName(host, sizeof(host));
-								ToStr(portstr, c->FirstSock->LocalPort);
-
-								Copy(src, b->Buf, b->Size);
-								ReplaceStrEx(dst, dst_size, src,
-									"$HOST$", host, false);
-								ReplaceStrEx(dst, dst_size, dst,
-									"$PORT$", portstr, false);
-
-								FreeHttpHeader(h);
-								h = NewHttpHeader("HTTP/1.1", "202", "OK");
-								AddHttpValue(h, NewHttpValue("Content-Type", HTTP_CONTENT_TYPE4));
-								AddHttpValue(h, NewHttpValue("Connection", "Keep-Alive"));
-								AddHttpValue(h, NewHttpValue("Keep-Alive", HTTP_KEEP_ALIVE));
-								PostHttp(c->FirstSock, h, dst, StrLen(dst));
-
-								Free(src);
-								Free(dst);
-
-								FreeBuf(b);
-							}
-						}
+						// Other than free version
+						HttpSendForbidden(c->FirstSock, h->Target, "");
 					}
 				}
 				else
@@ -6444,7 +6222,7 @@ SOCK *ClientConnectToServer(CONNECTION *c)
 	}
 
 	// Get the socket by connecting
-	s = ClientConnectGetSocket(c, false, (c->DontUseTls1 ? false : true));
+	s = ClientConnectGetSocket(c, false);
 	if (s == NULL)
 	{
 		// Connection failure
@@ -6465,7 +6243,7 @@ SOCK *ClientConnectToServer(CONNECTION *c)
 	SetTimeout(s, CONNECTING_TIMEOUT);
 
 	// Start the SSL communication
-	if (StartSSLEx(s, x, k, (c->DontUseTls1 ? false : true), 0, c->ServerName) == false)
+	if (StartSSLEx(s, x, k, 0, c->ServerName) == false)
 	{
 		// SSL communication start failure
 		Disconnect(s);
@@ -6489,7 +6267,7 @@ SOCK *ClientConnectToServer(CONNECTION *c)
 }
 
 // Return a socket by connecting to the server
-SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect, bool no_tls)
+SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect)
 {
 	SOCK *s = NULL;
 	CLIENT_OPTION *o;
@@ -6500,7 +6278,7 @@ SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect, bool no_tls
 	volatile bool *cancel_flag = NULL;
 	void *hWnd;
 	UINT nat_t_err = 0;
-	bool is_additonal_rudp_session = false;
+	bool is_additional_rudp_session = false;
 	UCHAR uc = 0;
 	IP ret_ip;
 	// Validate arguments
@@ -6516,7 +6294,7 @@ SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect, bool no_tls
 	if (sess != NULL)
 	{
 		cancel_flag = &sess->CancelConnect;
-		is_additonal_rudp_session = sess->IsRUDPSession;
+		is_additional_rudp_session = sess->IsRUDPSession;
 	}
 
 	hWnd = c->hWndForUI;
@@ -6560,8 +6338,8 @@ SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect, bool no_tls
 				// If additional_connect == false, enable trying to NAT-T connection
 				// If additional_connect == true, follow the IsRUDPSession setting in this session
 				s = TcpIpConnectEx(host_for_direct_connection, port_for_direct_connection,
-					(bool *)cancel_flag, hWnd, &nat_t_err, (additional_connect ? (!is_additonal_rudp_session) : false),
-					true, no_tls, &ret_ip);
+					(bool *)cancel_flag, hWnd, &nat_t_err, (additional_connect ? (!is_additional_rudp_session) : false),
+					true, &ret_ip);
 			}
 		}
 		else
@@ -6722,7 +6500,7 @@ SOCK *SocksConnectEx2(CONNECTION *c, char *proxy_host_name, UINT proxy_port,
 	}
 
 	// Connection
-	s = TcpConnectEx3(proxy_host_name, proxy_port, timeout, cancel_flag, hWnd, true, NULL, false, false, ret_ip);
+	s = TcpConnectEx3(proxy_host_name, proxy_port, timeout, cancel_flag, hWnd, true, NULL, false, ret_ip);
 	if (s == NULL)
 	{
 		// Failure
@@ -6929,7 +6707,7 @@ SOCK *ProxyConnectEx2(CONNECTION *c, char *proxy_host_name, UINT proxy_port,
 	}
 
 	// Connection
-	s = TcpConnectEx3(proxy_host_name, proxy_port, timeout, cancel_flag, hWnd, true, NULL, false, false, NULL);
+	s = TcpConnectEx3(proxy_host_name, proxy_port, timeout, cancel_flag, hWnd, true, NULL, false, NULL);
 	if (s == NULL)
 	{
 		// Failure
@@ -7079,32 +6857,32 @@ SOCK *ProxyConnectEx2(CONNECTION *c, char *proxy_host_name, UINT proxy_port,
 }
 
 // TCP connection function
-SOCK *TcpConnectEx2(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool try_start_ssl, bool ssl_no_tls)
+SOCK *TcpConnectEx2(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool try_start_ssl)
 {
-	return TcpConnectEx3(hostname, port, timeout, cancel_flag, hWnd, false, NULL, try_start_ssl, ssl_no_tls, NULL);
+	return TcpConnectEx3(hostname, port, timeout, cancel_flag, hWnd, false, NULL, try_start_ssl, NULL);
 }
-SOCK *TcpConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool no_nat_t, UINT *nat_t_error_code, bool try_start_ssl, bool ssl_no_tls, IP *ret_ip)
+SOCK *TcpConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool no_nat_t, UINT *nat_t_error_code, bool try_start_ssl, IP *ret_ip)
 {
 #ifdef	OS_WIN32
 	if (hWnd == NULL)
 	{
 #endif	// OS_WIN32
-		return ConnectEx4(hostname, port, timeout, cancel_flag, (no_nat_t ? NULL : VPN_RUDP_SVC_NAME), nat_t_error_code, try_start_ssl, ssl_no_tls, true, ret_ip);
+		return ConnectEx4(hostname, port, timeout, cancel_flag, (no_nat_t ? NULL : VPN_RUDP_SVC_NAME), nat_t_error_code, try_start_ssl, true, ret_ip);
 #ifdef	OS_WIN32
 	}
 	else
 	{
-		return WinConnectEx3((HWND)hWnd, hostname, port, timeout, 0, NULL, NULL, nat_t_error_code, (no_nat_t ? NULL : VPN_RUDP_SVC_NAME), try_start_ssl, ssl_no_tls);
+		return WinConnectEx3((HWND)hWnd, hostname, port, timeout, 0, NULL, NULL, nat_t_error_code, (no_nat_t ? NULL : VPN_RUDP_SVC_NAME), try_start_ssl);
 	}
 #endif	// OS_WIN32
 }
 
 // Connect with TCP/IP
-SOCK *TcpIpConnect(char *hostname, UINT port, bool try_start_ssl, bool ssl_no_tls)
+SOCK *TcpIpConnect(char *hostname, UINT port, bool try_start_ssl)
 {
-	return TcpIpConnectEx(hostname, port, NULL, NULL, NULL, false, try_start_ssl, ssl_no_tls, NULL);
+	return TcpIpConnectEx(hostname, port, NULL, NULL, NULL, false, try_start_ssl, NULL);
 }
-SOCK *TcpIpConnectEx(char *hostname, UINT port, bool *cancel_flag, void *hWnd, UINT *nat_t_error_code, bool no_nat_t, bool try_start_ssl, bool ssl_no_tls, IP *ret_ip)
+SOCK *TcpIpConnectEx(char *hostname, UINT port, bool *cancel_flag, void *hWnd, UINT *nat_t_error_code, bool no_nat_t, bool try_start_ssl, IP *ret_ip)
 {
 	SOCK *s = NULL;
 	UINT dummy_int = 0;
@@ -7119,7 +6897,7 @@ SOCK *TcpIpConnectEx(char *hostname, UINT port, bool *cancel_flag, void *hWnd, U
 		return NULL;
 	}
 
-	s = TcpConnectEx3(hostname, port, 0, cancel_flag, hWnd, no_nat_t, nat_t_error_code, try_start_ssl, ssl_no_tls, ret_ip);
+	s = TcpConnectEx3(hostname, port, 0, cancel_flag, hWnd, no_nat_t, nat_t_error_code, try_start_ssl, ret_ip);
 	if (s == NULL)
 	{
 		return NULL;
@@ -7389,18 +7167,3 @@ PACK *PackAdditionalConnect(UCHAR *session_key)
 
 	return p;
 }
-
-
-// Generate a RC4 key pair
-void GenerateRC4KeyPair(RC4_KEY_PAIR *k)
-{
-	// Validate arguments
-	if (k == NULL)
-	{
-		return;
-	}
-
-	Rand(k->ClientToServerKey, sizeof(k->ClientToServerKey));
-	Rand(k->ServerToClientKey, sizeof(k->ServerToClientKey));
-}
-

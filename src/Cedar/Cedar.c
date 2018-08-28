@@ -265,23 +265,11 @@ bool IsSupportedWinVer(RPC_WINVER *v)
 
 	if ((v->VerMajor == 6 && v->VerMinor == 4) || (v->VerMajor == 10 && v->VerMinor == 0))
 	{
-		if (v->IsServer == false)
+		// Windows 10 or Windows Server 2016
+		if (v->ServicePack <= 0)
 		{
-			// Windows 10 (not Windows Server 2016)
-			if (v->ServicePack <= 0)
-			{
-				// SP0 only
-				return true;
-			}
-		}
-		else
-		{
-			// Windows Server 2016
-			if (v->ServicePack <= 0)
-			{
-				// SP0 only
-				return true;
-			}
+			// SP0 only
+			return true;
 		}
 	}
 
@@ -387,34 +375,6 @@ int CompareNoSslList(void *p1, void *p2)
 		return 0;
 	}
 	return CmpIpAddr(&n1->IpAddress, &n2->IpAddress);
-}
-
-// Check whether the specified IP address is in Non-SSL connection list
-bool IsInNoSsl(CEDAR *c, IP *ip)
-{
-	bool ret = false;
-	// Validate arguments
-	if (c == NULL || ip == NULL)
-	{
-		return false;
-	}
-
-	LockList(c->NonSslList);
-	{
-		NON_SSL *n = SearchNoSslList(c, ip);
-
-		if (n != NULL)
-		{
-			if (n->EntryExpires > Tick64() && n->Count > NON_SSL_MIN_COUNT)
-			{
-				n->EntryExpires = Tick64() + (UINT64)NON_SSL_ENTRY_EXPIRES;
-				ret = true;
-			}
-		}
-	}
-	UnlockList(c->NonSslList);
-
-	return ret;
 }
 
 // Decrement connection count of Non-SSL connection list entry 
@@ -629,37 +589,6 @@ UINT64 GetTrafficPacketNum(TRAFFIC *t)
 		t->Send.BroadcastCount + t->Send.UnicastCount;
 }
 
-// Get whether hidden password is changed in UI
-bool IsHiddenPasswordChanged(char *str)
-{
-	// Validate arguments
-	if (str == NULL)
-	{
-		return true;
-	}
-
-	if (StrCmpi(str, HIDDEN_PASSWORD) == 0)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-// Initialize hidden password in UI
-void InitHiddenPassword(char *str, UINT size)
-{
-	// Validate arguments
-	if (str == NULL)
-	{
-		return;
-	}
-
-	StrCpy(str, size, HIDDEN_PASSWORD);
-}
-
 // Check whether the certificate is signed by CA which is trusted by the hub 
 bool CheckSignatureByCaLinkMode(SESSION *s, X *x)
 {
@@ -852,47 +781,6 @@ void DelConnection(CEDAR *cedar, CONNECTION *c)
 		}
 	}
 	UnlockList(cedar->ConnectionList);
-}
-
-// Get the number of unestablished connections
-UINT GetUnestablishedConnections(CEDAR *cedar)
-{
-	UINT i, ret;
-	// Validate arguments
-	if (cedar == NULL)
-	{
-		return 0;
-	}
-
-	ret = 0;
-
-	LockList(cedar->ConnectionList);
-	{
-		for (i = 0;i < LIST_NUM(cedar->ConnectionList);i++)
-		{
-			CONNECTION *c = LIST_DATA(cedar->ConnectionList, i);
-
-			switch (c->Type)
-			{
-			case CONNECTION_TYPE_CLIENT:
-			case CONNECTION_TYPE_INIT:
-			case CONNECTION_TYPE_LOGIN:
-			case CONNECTION_TYPE_ADDITIONAL:
-				switch (c->Status)
-				{
-				case CONNECTION_STATUS_ACCEPTED:
-				case CONNECTION_STATUS_NEGOTIATION:
-				case CONNECTION_STATUS_USERAUTH:
-					ret++;
-					break;
-				}
-				break;
-			}
-		}
-	}
-	UnlockList(cedar->ConnectionList);
-
-	return ret + Count(cedar->AcceptingSockets);
 }
 
 // Add connection to Cedar
@@ -1601,18 +1489,6 @@ void SetCedarCert(CEDAR *c, X *server_x, K *server_k)
 	Unlock(c->lock);
 }
 
-// Enable debug log
-void EnableDebugLog(CEDAR *c)
-{
-	// Validate arguments
-	if (c == NULL || c->DebugLog != NULL)
-	{
-		return;
-	}
-
-	c->DebugLog = NewLog("cedar_debug_log", "cedar", LOG_SWITCH_NO);
-}
-
 // Set the Cedar into VPN Bridge mode
 void SetCedarVpnBridge(CEDAR *c)
 {
@@ -1641,9 +1517,19 @@ void GetCedarVersion(char *tmp, UINT size)
 		return;
 	}
 
-	Format(tmp, size, "%u.%02u.%u",
-		CEDAR_VER / 100, CEDAR_VER - (CEDAR_VER / 100) * 100,
-		CEDAR_BUILD);
+	Format(tmp, size, "%u.%02u.%u", CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD);
+}
+
+UINT GetCedarVersionNumber()
+{
+	UINT pow = 10;
+
+	while (CEDAR_VERSION_MAJOR >= pow)
+	{
+		pow *= 10;
+	}
+
+	return CEDAR_VERSION_MAJOR * pow + CEDAR_VERSION_MINOR;
 }
 
 // Create Cedar object
@@ -1705,8 +1591,8 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 		c->ServerX = CloneX(server_x);
 	}
 
-	c->Version = CEDAR_VER;
-	c->Build = CEDAR_BUILD;
+	c->Version = GetCedarVersionNumber();
+	c->Build = CEDAR_VERSION_BUILD;
 	c->ServerStr = CopyStr(CEDAR_SERVER_STR);
 
 	GetMachineName(tmp, sizeof(tmp));
@@ -1752,8 +1638,7 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 	ToStr(tmp2, c->Beta);
 
 	Format(tmp, sizeof(tmp), "Version %u.%02u Build %u %s %s (%s)",
-		CEDAR_VER / 100, CEDAR_VER - (CEDAR_VER / 100) * 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		c->Beta == 0 ? "" : beta_str,
 		c->Beta == 0 ? "" : tmp2,
 		_SS("LANGSTR"));
@@ -1779,40 +1664,6 @@ CEDAR *NewCedar(X *server_x, K *server_k)
 	c->BuildInfo = CopyStr(tmp);
 
 	return c;
-}
-
-// Check whether the Cedar was build after the specified date
-bool IsLaterBuild(CEDAR *c, UINT64 t)
-{
-	SYSTEMTIME sb, st;
-	UINT64 b;
-	// Validate arguments
-	if (c == NULL)
-	{
-		return false;
-	}
-
-	Zero(&sb, sizeof(sb));
-	Zero(&st, sizeof(st));
-
-	UINT64ToSystem(&sb, c->BuiltDate);
-	UINT64ToSystem(&st, t);
-
-	// Ignore time of the day
-	sb.wHour = sb.wMinute = sb.wSecond = sb.wMilliseconds = 0;
-	st.wHour = st.wMinute = st.wSecond = st.wMilliseconds = 0;
-
-	b = SystemToUINT64(&sb);
-	t = SystemToUINT64(&st);
-
-	if (b > t)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
 }
 
 // Cumulate traffic size

@@ -206,7 +206,7 @@ void IPsecSendPacketByIPsecSa(IKE_SERVER *ike, IPSECSA *sa, UCHAR *data, UINT da
 				IPV4_SET_HEADER_LEN(&h, sizeof(IPV4_HEADER) / 4);
 				h.TotalLength = Endian16((USHORT)(data_size + sizeof(IPV4_HEADER)));
 				h.Identification = Endian16(c->TunnelSendIpId++);
-				h.FlagsAndFlagmentOffset[0] = h.FlagsAndFlagmentOffset[1] = 0;
+				h.FlagsAndFragmentOffset[0] = h.FlagsAndFragmentOffset[1] = 0;
 				h.TimeToLive = DEFAULT_IP_TTL;
 				h.Protocol = protocol_id;
 				h.SrcIP = IPToUINT(&c->TunnelModeServerIP);
@@ -1662,7 +1662,6 @@ void StartQuickMode(IKE_SERVER *ike, IKE_CLIENT *c)
 		UINT spi;
 		UINT spi_be;
 		UCHAR hash1[IKE_MAX_HASH_SIZE];
-		UCHAR zero = 0;
 		DH_CTX *dh = NULL;
 		UCHAR dummy_hash_data[IKE_MAX_HASH_SIZE];
 
@@ -2792,7 +2791,7 @@ IPSECSA *NewIPsecSa(IKE_SERVER *ike, IKE_CLIENT *c, IKE_SA *ike_sa, bool initiat
 	// Set the expiration time
 	if (setting->LifeSeconds != 0)
 	{
-		UINT64 span = (UINT64)(setting->LifeSeconds * 1000) + (UINT64)IKE_SOFT_EXPIRES_MARGIN;
+		UINT64 span = setting->LifeSeconds * (UINT64)1000 + (UINT64)IKE_SOFT_EXPIRES_MARGIN;
 		sa->ExpiresHardTick = ike->Now + span;
 		sa->ExpiresSoftTick = ike->Now + span;
 		//sa->ExpiresSoftTick = ike->Now + (UINT64)5000;
@@ -2839,7 +2838,7 @@ void ProcIkeAggressiveModePacketRecv(IKE_SERVER *ike, UDPPACKET *p, IKE_PACKET *
 
 			if ((caps.NatTraversalDraftIetf || caps.NatTraversalRfc3947) || (IsUdpPortOpened(ike->IPsec->UdpListener, &p->DstIP, IPSEC_PORT_IPSEC_ESP_RAW)))
 			{
-				sa = FindIkeSaByEndPointAndInitiatorCookie(ike, &p->DstIP, p->DestPort, &p->SrcIP, p->SrcPort, header->InitiatorCookie, IKE_SA_AGRESSIVE_MODE);
+				sa = FindIkeSaByEndPointAndInitiatorCookie(ike, &p->DstIP, p->DestPort, &p->SrcIP, p->SrcPort, header->InitiatorCookie, IKE_SA_AGGRESSIVE_MODE);
 
 				if (sa == NULL)
 				{
@@ -2894,7 +2893,7 @@ void ProcIkeAggressiveModePacketRecv(IKE_SERVER *ike, UDPPACKET *p, IKE_PACKET *
 								IKE_PACKET_PAYLOAD *your_nat_d_2 = NULL;
 
 								// Create an IKE SA
-								sa = NewIkeSa(ike, c, header->InitiatorCookie, IKE_SA_AGRESSIVE_MODE, &setting);
+								sa = NewIkeSa(ike, c, header->InitiatorCookie, IKE_SA_AGGRESSIVE_MODE, &setting);
 								Copy(&sa->Caps, &caps, sizeof(IKE_CAPS));
 								sa->State= IKE_SA_AM_STATE_1_SA;
 								Insert(ike->IkeSaList, sa);
@@ -3118,7 +3117,7 @@ void ProcIkeAggressiveModePacketRecv(IKE_SERVER *ike, UDPPACKET *p, IKE_PACKET *
 				header->ResponderCookie), true, header->InitiatorCookie, header->ResponderCookie);
 		}
 
-		if (sa != NULL && sa->Mode == IKE_SA_AGRESSIVE_MODE)
+		if (sa != NULL && sa->Mode == IKE_SA_AGGRESSIVE_MODE)
 		{
 			IKE_PACKET *pr = NULL;
 
@@ -3842,6 +3841,10 @@ bool IkeIsVendorIdExists(IKE_PACKET *p, char *str)
 	for (i = 0;i < num;i++)
 	{
 		IKE_PACKET_PAYLOAD *payload = IkeGetPayload(p->PayloadList, IKE_PAYLOAD_VENDOR_ID, i);
+		if (payload == NULL)
+		{
+			return false;
+		}
 
 		if (CompareBuf(payload->Payload.VendorId.Data, buf))
 		{
@@ -4325,7 +4328,7 @@ IKE_CLIENT *SearchOrCreateNewIkeClientForIkePacket(IKE_SERVER *ike, IP *client_i
 {
 	IKE_CLIENT *c;
 	// Validate arguments
-	if (ike == NULL || pr == NULL || client_ip == NULL || server_ip == NULL || client_port == 0 || server_port == 0 || pr == NULL)
+	if (ike == NULL || pr == NULL || client_ip == NULL || server_ip == NULL || client_port == 0 || server_port == 0)
 	{
 		return NULL;
 	}
@@ -5757,7 +5760,7 @@ void ProcessIKEInterrupts(IKE_SERVER *ike)
 	while (ike->StateHasChanged);
 
 	// Maintenance of the thread list
-	MainteThreadList(ike->ThreadList);
+	MaintainThreadList(ike->ThreadList);
 	/*Debug("ike->ThreadList: %u\n", LIST_NUM(ike->ThreadList));
 	{
 		UINT i;

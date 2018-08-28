@@ -128,8 +128,6 @@
 #include <Mayaqua/Mayaqua.h>
 
 #ifdef	UNIX_MACOS
-#include <mach/clock.h>
-#include <mach/mach.h>
 #ifdef	NO_VLAN
 // Struct statfs for MacOS X
 typedef struct fsid { int32_t val[2]; } fsid_t;
@@ -178,7 +176,7 @@ int local_scandir(const char *dir, struct dirent ***namelist,
   *namelist=NULL;
   while ((entry=readdir(d)) != NULL)
   {
-    if (select == NULL || (select != NULL && (*select)(entry)))
+    if (select == NULL || (*select)(entry))
     {
       *namelist=(struct dirent **)realloc((void *)(*namelist),
                  (size_t)((i+1)*sizeof(struct dirent *)));
@@ -364,7 +362,7 @@ void UnixDisableInterfaceOffload(char *name)
 		{
 			char *a = t->Token[i];
 
-			Format(tmp, sizeof(tmp), "/sbin/ethtool -K %s %s off 2>/dev/null", name, a);
+			Format(tmp, sizeof(tmp), "ethtool -K %s %s off 2>/dev/null", name, a);
 			FreeToken(UnixExec(tmp));
 		}
 	}
@@ -516,7 +514,7 @@ void UnixInitSolarisSleep()
 	char tmp[MAX_SIZE];
 
 	UnixNewPipe(&solaris_sleep_p1, &solaris_sleep_p2);
-	read(solaris_sleep_p1, tmp, sizeof(tmp));
+	(void)read(solaris_sleep_p1, tmp, sizeof(tmp));
 }
 
 // Release the Sleep for Solaris
@@ -536,21 +534,10 @@ void UnixSolarisSleep(UINT msec)
 	p.fd = solaris_sleep_p1;
 	p.events = POLLIN;
 
-	poll(&p, 1, msec == INFINITE ? -1 : (int)msec);
+	(void)poll(&p, 1, msec == INFINITE ? -1 : (int)msec);
 }
 
 // Get the free space of the disk
-bool UnixGetDiskFreeW(wchar_t *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size)
-{
-	char *path_a = CopyUniToStr(path);
-	bool ret;
-
-	ret = UnixGetDiskFree(path_a, free_size, used_size, total_size);
-
-	Free(path_a);
-
-	return ret;
-}
 bool UnixGetDiskFree(char *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size)
 {
 	char tmp[MAX_PATH];
@@ -803,42 +790,6 @@ void UnixSetThreadPriorityRealtime()
 	pthread_setschedparam(pthread_self(), SCHED_RR, &p);
 }
 
-// Lower the priority of the thread
-void UnixSetThreadPriorityLow()
-{
-	struct sched_param p;
-	Zero(&p, sizeof(p));
-	p.sched_priority = 32;
-	pthread_setschedparam(pthread_self(), SCHED_OTHER, &p);
-}
-
-// Raise the priority of the thread
-void UnixSetThreadPriorityHigh()
-{
-	struct sched_param p;
-	Zero(&p, sizeof(p));
-	p.sched_priority = 127;
-	pthread_setschedparam(pthread_self(), SCHED_RR, &p);
-}
-
-// Set the priority of the thread to idle
-void UnixSetThreadPriorityIdle()
-{
-	struct sched_param p;
-	Zero(&p, sizeof(p));
-	p.sched_priority = 1;
-	pthread_setschedparam(pthread_self(), SCHED_OTHER, &p);
-}
-
-// Restore the priority of the thread to normal
-void UnixRestoreThreadPriority()
-{
-	struct sched_param p;
-	Zero(&p, sizeof(p));
-	p.sched_priority = 64;
-	pthread_setschedparam(pthread_self(), SCHED_OTHER, &p);
-}
-
 // Get the current directory
 void UnixGetCurrentDir(char *dir, UINT size)
 {
@@ -899,10 +850,10 @@ void UnixFreeSingleInstance(void *data)
 	lock.l_type = F_UNLCK;
 	lock.l_whence = SEEK_SET;
 
-	fcntl(o->fd, F_SETLK, &lock);
+	(void)fcntl(o->fd, F_SETLK, &lock);
 	close(o->fd);
 
-	remove(o->FileName);
+	(void)remove(o->FileName);
 
 	Free(data);
 }
@@ -947,7 +898,7 @@ void *UnixNewSingleInstance(char *instance_name)
 	}
 
 	fchmod(fd, mode);
-	chmod(name, mode);
+	(void)chmod(name, mode);
 
 	Zero(&lock, sizeof(lock));
 	lock.l_type = F_WRLCK;
@@ -1111,27 +1062,20 @@ void UnixGetOsInfo(OS_INFO *info)
 	}
 
 	Zero(info, sizeof(OS_INFO));
-	info->OsType = OSTYPE_UNIX_UNKNOWN;
 
 #ifdef	UNIX_SOLARIS
 	info->OsType = OSTYPE_SOLARIS;
-#endif	// UNIX_SOLARIS
-
-#ifdef	UNIX_CYGWIN
+#elif	UNIX_CYGWIN
 	info->OsType = OSTYPE_CYGWIN;
-#endif	// UNIX_CYGWIN
-
-#ifdef	UNIX_MACOS
+#elif	UNIX_MACOS
 	info->OsType = OSTYPE_MACOS_X;
-#endif	// UNIX_MACOS
-
-#ifdef	UNIX_BSD
+#elif	UNIX_BSD
 	info->OsType = OSTYPE_BSD;
-#endif	// UNIX_BSD
-
-#ifdef	UNIX_LINUX
+#elif	UNIX_LINUX
 	info->OsType = OSTYPE_LINUX;
-#endif	// UNIX_LINUX
+#else
+	info->OsType = OSTYPE_UNIX_UNKNOWN;
+#endif
 
 	info->OsServicePack = 0;
 
@@ -1300,43 +1244,6 @@ bool UnixRun(char *filename, char *arg, bool hide, bool wait)
 	}
 }
 
-// Initialize the daemon
-void UnixDaemon(bool debug_mode)
-{
-	UINT ret;
-
-	if (debug_mode)
-	{
-		// Debug mode
-		signal(SIGHUP, SIG_IGN);
-		return;
-	}
-
-	ret = fork();
-
-	if (ret == -1)
-	{
-		// Error
-		return;
-	}
-	else if (ret == 0)
-	{
-		// Create a new session for the child process
-		setsid();
-
-		// Close the standard I/O
-		UnixCloseIO();
-
-		// Mute the unwanted signal
-		signal(SIGHUP, SIG_IGN);
-	}
-	else
-	{
-		// Terminate the parent process
-		exit(0);
-	}
-}
-
 // Close the standard I/O
 void UnixCloseIO()
 {
@@ -1352,7 +1259,7 @@ void UnixCloseIO()
 		close(0);
 		close(1);
 		close(2);
-		open("/dev/null", O_RDWR);
+		(void)open("/dev/null", O_RDWR);
 		dup2(0, 1);
 		dup2(0, 2);
 		close_io_first = false;
@@ -1710,6 +1617,23 @@ void *UnixFileOpen(char *name, bool write_mode, bool read_lock)
 	return (void *)p;
 }
 
+// Get UNIXIO object for stdout
+void* GetUnixio4Stdout()
+{
+	static UNIXIO unixio =
+	{
+		.fd = -1,
+		.write_mode = true
+	};
+
+	if (g_foreground)
+	{
+		unixio.fd = STDOUT_FILENO;
+		return &unixio;
+	}
+	return NULL;
+}
+
 // Return the current thread ID
 UINT UnixThreadId()
 {
@@ -1816,7 +1740,7 @@ bool UnixInitThread(THREAD *t)
 	{
 		// An error has occured
 		t->pData = NULL;
-		Release(t->ref);
+		(void)Release(t->ref);
 		UnixMemoryFree(ut);
 		UnixMemoryFree(info);
 		pthread_attr_destroy(&attr);
@@ -2166,22 +2090,8 @@ UINT64 UnixGetTick64()
 	}
 
 	return ret;
-
-#else
-#ifdef	UNIX_MACOS
-	static clock_serv_t clock_serv = 0;
-	mach_timespec_t t;
-	UINT64 ret;
-	if (clock_serv == 0) {
-		host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &clock_serv);
-	}
-	clock_get_time(clock_serv, &t);
-	ret = ((UINT64)((UINT32)t.tv_sec)) * 1000LL + (UINT64)t.tv_nsec / 1000000LL;
-	return ret;
 #else
 	return TickRealtimeManual();
-#endif
-
 #endif
 }
 
@@ -2630,8 +2540,6 @@ void UnixStopService(char *name)
 	}
 	else
 	{
-		int status;
-
 		// Stop the service
 		UniPrint(_UU("UNIX_SVC_STOPPING"), svc_title);
 
@@ -2792,10 +2700,6 @@ bool UnixWaitProcessEx(UINT pid,  UINT timeout)
 	}
 	return true;
 }
-void UnixWaitProcess(UINT pid)
-{
-	UnixWaitProcessEx(pid, INFINITE);
-}
 
 // Description of how to start
 void UnixUsage(char *name)
@@ -2855,6 +2759,12 @@ RESTART_PROCESS:
 				}
 			}
 		}
+	}
+	else if (argc >= 3 && StrCmpi(argv[1], UNIX_SVC_ARG_START) == 0 && StrCmpi(argv[2], UNIX_SVC_ARG_FOREGROUND) == 0)
+	{
+		InitMayaqua(false, false, argc, argv);
+		UnixExecService(name, start, stop);
+		FreeMayaqua();
 	}
 	else
 	{

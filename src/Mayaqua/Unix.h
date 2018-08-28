@@ -141,6 +141,7 @@ typedef void (SERVICE_FUNCTION)();
 #define	UNIX_SVC_ARG_STOP				"stop"
 #define	UNIX_SVC_ARG_EXEC_SVC			"execsvc"
 #define	UNIX_ARG_EXIT					"exit"
+#define UNIX_SVC_ARG_FOREGROUND				"--foreground"
 
 #define	UNIX_SVC_MODE_START				1
 #define	UNIX_SVC_MODE_STOP				2
@@ -178,6 +179,7 @@ void *UnixFileOpen(char *name, bool write_mode, bool read_lock);
 void *UnixFileOpenW(wchar_t *name, bool write_mode, bool read_lock);
 void *UnixFileCreate(char *name);
 void *UnixFileCreateW(wchar_t *name);
+void *GetUnixio4Stdout();
 bool UnixFileWrite(void *pData, void *buf, UINT size);
 bool UnixFileRead(void *pData, void *buf, UINT size);
 void UnixFileClose(void *pData, bool no_flush);
@@ -216,16 +218,11 @@ void UnixSetEnableKernelEspProcessing(bool b);
 
 void UnixDisableCoreDump();
 void UnixSetThreadPriorityRealtime();
-void UnixSetThreadPriorityLow();
-void UnixSetThreadPriorityHigh();
-void UnixSetThreadPriorityIdle();
-void UnixRestoreThreadPriority();
 void UnixSetResourceLimit(UINT id, UINT64 value);
 bool UnixIs64BitRlimSupported();
 UINT64 UnixGetTick64();
 void UnixSigChldHandler(int sig);
 void UnixCloseIO();
-void UnixDaemon(bool debug_mode);
 void UnixGetCurrentDir(char *dir, UINT size);
 void UnixGetCurrentDirW(wchar_t *dir, UINT size);
 bool UnixCheckExecAccess(char *name);
@@ -234,7 +231,6 @@ DIRLIST *UnixEnumDirEx(char *dirname, COMPARE *compare);
 DIRLIST *UnixEnumDirExW(wchar_t *dirname, COMPARE *compare);
 bool UnixGetDiskFreeMain(char *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
 bool UnixGetDiskFree(char *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
-bool UnixGetDiskFreeW(wchar_t *path, UINT64 *free_size, UINT64 *used_size, UINT64 *total_size);
 void UnixInitSolarisSleep();
 void UnixFreeSolarisSleep();
 void UnixSolarisSleep(UINT msec);
@@ -253,7 +249,6 @@ UINT UnixReadPidFile();
 UINT UnixReadCtlFile();
 bool UnixIsProcess(UINT pid);
 bool UnixWaitProcessEx(UINT pid, UINT timeout);
-void UnixWaitProcess(UINT pid);
 void UnixDeletePidFile();
 void UnixDeleteCtlFile();
 void UnixStopThread(THREAD *t, void *param);

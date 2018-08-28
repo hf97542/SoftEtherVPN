@@ -133,7 +133,7 @@ struct RPC_ADD_DEVICE
 {
 	char DeviceName[MAX_SIZE];			// Device name
 	HUB_LOG LogSetting;					// Log settings
-	bool NoPromiscus;					// Without promiscuous mode
+	bool NoPromiscuous;					// Without promiscuous mode
 };
 
 struct RPC_DELETE_DEVICE
@@ -173,7 +173,7 @@ struct EL_DEVICE
 	CANCEL *Cancel2;					// Cancel 2
 	volatile bool Halt;					// Halting flag
 	bool Active;						// Running flag
-	bool NoPromiscus;					// Without promiscuous mode
+	bool NoPromiscuous;					// Without promiscuous mode
 	LOG *Logger;						// Logger
 };
 
@@ -205,8 +205,6 @@ struct EL
 };
 
 // Function prototype
-void ElInit();
-void ElFree();
 void ElStart();
 void ElStop();
 EL *NewEl();
@@ -219,7 +217,7 @@ void ElLoadConfigFromFolder(EL *e, FOLDER *root);
 void ElSaveConfig(EL *e);
 void ElSaveConfigToFolder(EL *e, FOLDER *root);
 int ElCompareDevice(void *p1, void *p2);
-bool ElAddCaptureDevice(EL *e, char *name, HUB_LOG *log, bool no_promiscus);
+bool ElAddCaptureDevice(EL *e, char *name, HUB_LOG *log, bool no_promiscuous);
 bool ElDeleteCaptureDevice(EL *e, char *name);
 bool ElSetCaptureDeviceLogSetting(EL *e, char *name, HUB_LOG *log);
 void ElCaptureThread(THREAD *thread, void *param);
@@ -227,7 +225,6 @@ void ElStartListener(EL *e);
 void ElStopListener(EL *e);
 void ElListenerProc(THREAD *thread, void *param);
 PACK *ElRpcServer(RPC *r, char *name, PACK *p);
-void ElCheckLicense(EL_LICENSE_STATUS *st, LICENSE *e);
 void ElParseCurrentLicenseStatus(LICENSE_SYSTEM *s, EL_LICENSE_STATUS *st);
 bool ElIsBetaExpired();
 
@@ -253,7 +250,6 @@ UINT EcGetDevice(RPC *r, RPC_ADD_DEVICE *t);
 UINT EcEnumDevice(RPC *r, RPC_ENUM_DEVICE *t);
 UINT EcEnumAllDevice(RPC *r, RPC_ENUM_DEVICE *t);
 UINT EcSetPassword(RPC *r, RPC_SET_PASSWORD *t);
-UINT EcAddLicenseKey(RPC *r, RPC_TEST *t);
 UINT EcDelLicenseKey(RPC *r, RPC_TEST *t);
 UINT EcEnumLicenseKey(RPC *r, RPC_ENUM_LICENSE_KEY *t);
 UINT EcGetLicenseStatus(RPC *r, RPC_EL_LICENSE_STATUS *t);

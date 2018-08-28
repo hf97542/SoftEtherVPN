@@ -360,8 +360,6 @@
 #define B_IE                            1087
 #define B_EXPORT                        1088
 #define IDC_STATIC1                     1088
-#define R_R_NOTLS1                      1088
-#define R_NOTLS1                        1088
 #define R_USE_PASSWORD                  1089
 #define IDC_STATIC3                     1089
 #define B_IMPORT2                       1089
@@ -711,7 +709,7 @@
 #define S_TSUKUBA2                      1281
 #define IDC_CHECK1                      1285
 #define R_NO_SAVE_PASSWORD              1285
-#define R_PROMISCUS                     1285
+#define R_PROMISCUOUS                   1285
 #define R_NO_ENUM                       1285
 #define R_ETHERNET                      1285
 #define R_CONTROLLER_ONLY               1285
@@ -936,7 +934,7 @@
 #define R_UNESTABLISHED                 1435
 #define R_USER                          1435
 #define R_CUSTOM                        1435
-#define S_DISBLE                        1435
+#define S_DISABLE                        1435
 #define R_PERMANENT                     1435
 #define R_FOR_SYSTEM                    1436
 #define IDC_NETADDRESS1                 1437

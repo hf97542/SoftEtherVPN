@@ -1,10 +1,12 @@
 .cproject
 .project
 .settings/
-CMakeLists.txt
 Makefile
 bin/
+build/
 cmake-build-debug/
 src/bin/BuiltHamcoreFiles/
 tmp/
-
+.gitconfig
+CMakeCache.txt
+CMakeFiles/

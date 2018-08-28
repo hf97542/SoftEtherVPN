@@ -133,6 +133,7 @@ BOOL kernel_status_inited = false;				// Kernel state initialization flag
 bool g_little_endian = true;
 char *cmdline = NULL;							// Command line
 wchar_t *uni_cmdline = NULL;					// Unicode command line
+bool g_foreground = false;					// Execute service in foreground mode
 
 // Static variable
 static char *exename = NULL;						// EXE file name (ANSI)
@@ -154,7 +155,19 @@ static UINT64 probe_start = 0;
 static UINT64 probe_last = 0;
 static bool probe_enabled = false;
 
+// The function which should be called once as soon as possible after the process is started
+static bool init_proc_once_flag = false;
+void InitProcessCallOnce()
+{
+	if (init_proc_once_flag == false)
+	{
+		init_proc_once_flag = true;
 
+#ifdef	OS_WIN32
+		MsInitProcessCallOnce();
+#endif	// OS_WIN32
+	}
+}
 
 // Calculate the checksum
 USHORT CalcChecksum16(void *buf, UINT size)
@@ -490,6 +503,8 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 		return;
 	}
 
+	InitProcessCallOnce();
+
 	g_memcheck = memcheck;
 	g_debug = debug;
 	cmdline = NULL;
@@ -498,6 +513,12 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 		// Fail this for some reason when this is called this in .NET mode
 		setbuf(stdout, NULL);
 	}
+
+#ifdef OS_UNIX
+	g_foreground = (argc >= 3 && StrCmpi(argv[2], UNIX_SVC_ARG_FOREGROUND) == 0);
+#else
+	g_foreground = false;
+#endif // OS_UNIX
 
 	// Acquisition whether NT
 #ifdef	OS_WIN32
@@ -552,7 +573,7 @@ void InitMayaqua(bool memcheck, bool debug, int argc, char **argv)
 	// Initialize the network communication module
 	InitNetwork();
 
-	// Initialization of the aquisition of the EXE file name
+	// Initialization of the acquisition of the EXE file name
 	InitGetExeName(argc >= 1 ? argv[0] : NULL);
 
 	// Initialization of the command line string

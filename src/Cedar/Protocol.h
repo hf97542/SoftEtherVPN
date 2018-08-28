@@ -121,7 +121,7 @@ struct CHECK_CERT_THREAD_PROC
 	X *ServerX;
 	CHECK_CERT_PROC *CheckCertProc;
 	bool UserSelected;
-	bool Exipred;
+	bool Expired;
 	bool Ok;
 };
 
@@ -217,16 +217,16 @@ UINT64 ShortStrToDate64(char *str);
 bool ServerAccept(CONNECTION *c);
 bool ClientConnect(CONNECTION *c);
 SOCK *ClientConnectToServer(CONNECTION *c);
-SOCK *TcpIpConnect(char *hostname, UINT port, bool try_start_ssl, bool ssl_no_tls);
-SOCK *TcpIpConnectEx(char *hostname, UINT port, bool *cancel_flag, void *hWnd, UINT *nat_t_error_code, bool no_nat_t, bool try_start_ssl, bool ssl_no_tls, IP *ret_ip);
+SOCK *TcpIpConnect(char *hostname, UINT port, bool try_start_ssl);
+SOCK *TcpIpConnectEx(char *hostname, UINT port, bool *cancel_flag, void *hWnd, UINT *nat_t_error_code, bool no_nat_t, bool try_start_ssl, IP *ret_ip);
 bool ClientUploadSignature(SOCK *s);
 bool ClientDownloadHello(CONNECTION *c, SOCK *s);
 bool ServerDownloadSignature(CONNECTION *c, char **error_detail_str);
 bool ServerUploadHello(CONNECTION *c);
 bool ClientUploadAuth(CONNECTION *c);
-SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect, bool no_tls);
-SOCK *TcpConnectEx2(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool try_start_ssl, bool ssl_no_tls);
-SOCK *TcpConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool no_nat_t, UINT *nat_t_error_code, bool try_start_ssl, bool ssl_no_tls, IP *ret_ip);
+SOCK *ClientConnectGetSocket(CONNECTION *c, bool additional_connect);
+SOCK *TcpConnectEx2(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool try_start_ssl);
+SOCK *TcpConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, void *hWnd, bool no_nat_t, UINT *nat_t_error_code, bool try_start_ssl, IP *ret_ip);
 
 void InitProtocol();
 void FreeProtocol();
@@ -258,7 +258,6 @@ bool ClientAdditionalConnect(CONNECTION *c, THREAD *t);
 SOCK *ClientAdditionalConnectToServer(CONNECTION *c);
 bool ClientUploadAuth2(CONNECTION *c, SOCK *s);
 bool GetSessionKeyFromPack(PACK *p, UCHAR *session_key, UINT *session_key_32);
-void GenerateRC4KeyPair(RC4_KEY_PAIR *k);
 
 SOCK *ProxyConnect(CONNECTION *c, char *proxy_host_name, UINT proxy_port,
 				   char *server_host_name, UINT server_port,

@@ -151,12 +151,6 @@
 #define	OPENVPN_IPC_POSTFIX_L2					"OPENVPN_L2"
 #define	OPENVPN_IPC_POSTFIX_L3					"OPENVPN_L3"
 
-// List of supported encryption algorithms
-#define	OPENVPN_CIPHER_LIST						"[NULL-CIPHER] NULL AES-128-CBC AES-192-CBC AES-256-CBC BF-CBC CAST-CBC CAST5-CBC DES-CBC DES-EDE-CBC DES-EDE3-CBC DESX-CBC RC2-40-CBC RC2-64-CBC RC2-CBC CAMELLIA-128-CBC CAMELLIA-192-CBC CAMELLIA-256-CBC"
-
-// List of the supported hash algorithm
-#define	OPENVPN_MD_LIST							"SHA SHA1 SHA256 SHA384 SHA512 MD5 MD4 RMD160"
-
 // MTU
 #define	OPENVPN_MTU_LINK						1514	// Ethernet MTU
 #define	OPENVPN_MTU_TUN							1500	// Tun MTU
@@ -189,6 +183,10 @@
 #define	OPENVPN_MODE_UNKNOWN					0		// Unknown
 #define	OPENVPN_MODE_L2							1		// TAP (Ethernet)
 #define	OPENVPN_MODE_L3							2		// TUN (IP)
+
+// Data
+#define OPENVPN_DATA_OPTIONS	0
+#define OPENVPN_DATA_PEERINFO	1
 
 
 //// Type
@@ -361,15 +359,11 @@ void OvsSetupSessionParameters(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_C
 BUF *OvsBuildKeyMethod2(OPENVPN_KEY_METHOD_2 *d);
 void OvsWriteStringToBuf(BUF *b, char *str, UINT max_size);
 
-LIST *OvsParseOptions(char *str);
-void OvsFreeOptions(LIST *o);
-LIST *OvsNewOptions();
-void OvsAddOption(LIST *o, char *key, char *value);
-bool OvsHasOption(LIST *o, char *key);
+LIST *OvsParseData(char *str, int type);
+void OvsFreeList(LIST *o);
+bool OvsHasEntry(LIST *o, char *key);
 UINT OvsPeekStringFromFifo(FIFO *f, char *str, UINT str_size);
 void OvsBeginIPCAsyncConnectionIfEmpty(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_CHANNEL *c);
-bool OvsIsCompatibleL3IP(UINT ip);
-UINT OvsGetCompatibleL3IPNext(UINT ip);
 UINT OvsCalcTcpMss(OPENVPN_SERVER *s, OPENVPN_SESSION *se, OPENVPN_CHANNEL *c);
 
 CIPHER *OvsGetCipher(char *name);
@@ -380,10 +374,7 @@ bool OvsPerformTcpServer(CEDAR *cedar, SOCK *sock);
 
 void OvsSetReplyForVgsPollEnable(bool b);
 
-void OvsSetNoOpenVpnTcp(bool b);
 bool OvsGetNoOpenVpnTcp();
-
-void OvsSetNoOpenVpnUdp(bool b);
 
 void OpenVpnServerUdpSetDhParam(OPENVPN_SERVER_UDP *u, DH_CTX *dh);
 

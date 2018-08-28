@@ -24,7 +24,7 @@ DEFAULT_FONT			MingLiU
 DEFAULT_FONT_HIGHDPI	Microsoft JhengHei
 DEFAULT_FONT_2			Microsoft JhengHei
 DEFAULT_FONT_SIZE		9
-DEFAULE_LOCALE			年 月 日 點 分 秒 星期日 星期一 星期二 星期三 星期四 星期五 星期六 天 小時 分 秒 (無)
+DEFAULT_LOCALE			年 月 日 點 分 秒 星期日 星期一 星期二 星期三 星期四 星期五 星期六 天 小時 分 秒 (無)
 
 
 # 語言
@@ -567,7 +567,7 @@ HUB_AO_SecureNAT_RandomizeAssignIp			If you set this option to non-zero value, t
 HUB_AO_DetectDormantSessionInterval			If you set this option to non-zero value, then the Virtual Hub will treat the VPN sessions, which have transmitted no packets for the last specified intervals (in seconds), as Dormant Sessions. The Virtual Hub will not flood packets, which should be flood, to any Dormant Sessions.
 HUB_AO_NoPhysicalIPOnPacketLog				If you set this option to non-zero value, then the physical IP addresses of VPN clients of either the source VPN session or the destination VPN session will not be recorded on the packet log file.
 HUB_AO_UseHubNameAsDhcpUserClassOption		If you set this option to non-zero value, then the Virtual Hub Name will be added to a DHCP request to an external DHCP server as the "User-Class" option. This allows to use separate pools of IP addresses for each Virtual Hub. (For only L2TP/IPsec and OpenVPN sessions.)
-HUB_AO_UseHubNameAsRadiusNasId				If you set this option to non-zero value, then the NAS-Identidier RADIUS attribute will be set to a name of the Virtual Hub. This allows to determine on RADIUS server whether access to the Virtual Hub should be granted or denied.
+HUB_AO_UseHubNameAsRadiusNasId				If you set this option to non-zero value, then the NAS-Identifier RADIUS attribute will be set to a name of the Virtual Hub. This allows to determine on RADIUS server whether access to the Virtual Hub should be granted or denied.
 
 
 #關於失敗連接對話方塊
@@ -667,7 +667,7 @@ CT_b_support_special_listener	支持 VPN over ICMP 和 VPN over DNS
 CT_b_support_redirect_url_acl	支持訪問列表 HTTP URL 改道
 CT_b_is_in_vm			虛擬機器上運行
 CT_b_support_azure		支持 VPN Azure
-CT_b_support_intel_aes	支援 Intel CPU AES 加密加速功能 (AES-NI)
+CT_b_support_aes_ni	支援 CPU AES 加密加速功能 (AES-NI)
 CT_b_using_selow_driver	支持 SoftEther Lightweight Kernel-mode Ethernet Driver
 CT_b_support_vgs		支援 VPN Gate 服務的伺服器功能
 CT_b_support_vgs_in_client	VPN Gate 服務的伺服器功能 (VPN 用戶端集成)
@@ -1006,6 +1006,7 @@ CM_WOULDYOULOAD_IE_PROXY	目前，這台電腦的 Internet Explorer 配置使用
 CM_MSG_TITLE			VPN Server "%S" (虛擬 HUB: "%S")
 CM_JUMPLIST_RCCONNECT	最近使用的連接設置
 CM_VPNGATE_MESSAGE		在 VPN Gate 學術項目網站上有一個公共 VPN 中繼伺服器列表。\r\n網際網路上的任何人都可以建立 VPN 連接至任一列表上的 VPN 伺服器。無需用戶註冊。\r\n\r\nVPN Gate 不是 SoftEther VPN 的一部分。\r\n此圖示只提供了一個超連結到 http://www.vpngate.net/。\r\n\r\n安裝帶有 SoftEther VPN Client 的 VPN Gate Client 外掛程式。它可用簡單的配置連接到 VPN Gate 的一個公共 VPN 中繼伺服器。\r\n\r\n你想訪問 http://www.vpngate.net/ (設在日本筑波大學) ?
+CM_VLAN_REINSTALL_MSG	After reinstalling the Virtual Network Adapter driver, the current Virtual Network Adapter's MAC address will change. Also, all TCP/IP settings within the Virtual Network Adapter will reset.\r\n\r\nIn case the reinstalled Virtual Network Adapter fails to work, delete it and create a new one. If it still doesn't work properly, please create a new Virtual Network Adapter with a different name.
 
 
 # VPN Gate Service
@@ -1220,7 +1221,7 @@ CM_EDIT_HUB_2			%S 的屬性
 
 CM_EDIT_HUB_STANDALONE	當前，伺服器正以獨立模式運行。而該虛擬 HUB 作為一個獨立的 HUB 運行。
 CM_EDIT_HUB_TYPE_FIXED	當前，伺服器正以群集模式運行。如果虛擬 HUB 處於這種模式，動態變化將無法進行。
-CM_EDIT_HUB_CREATER		一個新的虛擬 HUB "%S" 已經建立
+CM_EDIT_HUB_CREATED		一個新的虛擬 HUB "%S" 已經建立
 CM_OFFLINE_MSG			你想切換 "%s" 到離線狀態?\r\n\r\n如果您切換虛擬 HUB 至離線狀態，當前連接到虛擬 HUB 上的所有會話將無法連接。
 CM_DELETE_HUB_MSG		你想刪除"%S"嗎?\r\n\r\n如果你刪除虛擬 HUB，當前連接到虛擬 HUB 的所有會話將被斷開，新的會話將無法連接。\r\n這還將刪除所有 HUB 設置，使用者物件，組物件，證書和級聯連接。\r\n\r\n一旦你將虛擬 HUB 刪除，將無法恢復。\r\n你確定要刪除嗎?
 CM_HUB_DELETED_MSG		虛擬 HUB "%S" 被刪除。
@@ -1376,7 +1377,7 @@ SM_EDIT_USER_POL_DLG	用戶 %S 的安全性原則
 SM_POLICY_DEF_CAPTION	安全性原則
 SM_LIMIT_STR			指定一個在 %u 與 %u 之間的整數。
 SM_POLICY_INIT_TITLE	從左邊的列表中選擇一個策略項目。
-SM_USER_CREEATE_OK		用戶 %S 已創建。
+SM_USER_CREATE_OK		用戶 %S 已創建。
 SM_USERINFO_CAPTION		使用者 "%S" 的資訊
 SM_USERINFO_NAME		用戶名
 SM_USERINFO_GROUP		組名
@@ -2090,8 +2091,8 @@ LC_SET_PASSWORD			連接到用戶端服務的密碼設置已變更。
 LC_TAP_NOT_FOUND		無法找到 tun/tap 的 Mac OS X 驅動。請安裝 tun/tap 驅動。
 
 #(刪除日誌)
-LE_START				正在監控目錄 "%S"。如果可用磁碟空間變得小於 %S，此目錄和其子目錄下的日誌檔和設定檔的備份檔案將按照從舊到新的順序被自動刪除。決定何時開始刪除的可用磁碟空間大小，可以在設定檔的“AutoDeletCheckDiskFreeSpaceMin”項目中修改。
-LE_DELETE				可用磁碟空間已小於 %S，因此舊檔 "%S" 被自動刪除。決定何時開始刪除的可用磁碟空間大小，可以在設定檔的“AutoDeletCheckDiskFreeSpaceMin”項目中修改。
+LE_START				正在監控目錄 "%S"。如果可用磁碟空間變得小於 %S，此目錄和其子目錄下的日誌檔和設定檔的備份檔案將按照從舊到新的順序被自動刪除。決定何時開始刪除的可用磁碟空間大小，可以在設定檔的“AutoDeleteCheckDiskFreeSpaceMin”項目中修改。
+LE_DELETE				可用磁碟空間已小於 %S，因此舊檔 "%S" 被自動刪除。決定何時開始刪除的可用磁碟空間大小，可以在設定檔的“AutoDeleteCheckDiskFreeSpaceMin”項目中修改。
 LE_NOT_ENOUGH_FREE		<<警告>> 如果可用磁碟空間小於 %S，將不能自動刪除日誌檔和設定檔的舊備份檔案。我們建議您即刻從次電腦上手動刪除不必要的檔來恢復可用磁碟空間。當可用磁碟空間過小時，電腦運行將被變得不穩定。
 
 # (三層交換機日誌)
@@ -2332,7 +2333,6 @@ S_RETRY_NUM_2			次
 S_RETRY_SPAN_1			重連間隔(&K):
 S_RETRY_SPAN_2			秒
 R_INFINITE				無限重連(總是保持 VPN 線上) (&I)
-R_NOTLS1				不要使用 TLS &1.0
 B_DETAIL				進階設置(&D)...
 IDOK					確定(&O)
 IDCANCEL				取消
@@ -3230,7 +3230,7 @@ IDCANCEL				關閉(&X)
 
 PREFIX					D_EM_ADD
 STATIC1					用於捕獲的網路介面卡名稱(&L):
-R_PROMISCUS				捕獲時不要使用混雜模式(&N)
+R_PROMISCUOUS				捕獲時不要使用混雜模式(&N)
 STATIC2					封包日誌 (&P) :
 S_PACKET				日誌檔切換週期 (&W) :
 S_PACKET_0				TCP 連接日誌:
@@ -4075,7 +4075,7 @@ CAPTION					更新提醒設定
 S_INFO					當新版本將要發佈時，請定期查詢 %s 的新版本和彈出提示窗口。\r\n\r\nHTTPS 封包將會用在本電腦和位於日本筑波的 SoftEther 升級伺服器之間，用於查詢有無升級資訊。個人資訊不會外泄。
 S_TITLE					%s 升級以及提示設置
 S_ENABLE				啟用更新提醒(&E)
-S_DISBLE				停用更新提醒(&D)
+S_DISABLE				停用更新提醒(&D)
 IDCANCEL				關閉(&C)
 
 
@@ -4309,13 +4309,13 @@ CON_INFILE_START			在檔 "%s" 中寫入命令將被使用代替鍵盤輸入。
 CON_OUTFILE_START			該消息輸出到控制台將被保存在檔 "%s"。
 CON_USER_CANCEL				[EOF]
 CON_UNKNOWN_CMD				"%S": 命令未找到。\n您可以使用 "HELP" 命令來查看一個可用的命令列表。
-CON_AMBIGIOUS_CMD			"%S": 命令名稱是模糊的。
-CON_AMBIGIOUS_CMD_1			指定的命令名稱匹配以下多個命令:
-CON_AMBIGIOUS_CMD_2			請更嚴格地重新指定命令名稱。
+CON_AMBIGUOUS_CMD			"%S": 命令名稱是模糊的。
+CON_AMBIGUOUS_CMD_1			指定的命令名稱匹配以下多個命令:
+CON_AMBIGUOUS_CMD_2			請更嚴格地重新指定命令名稱。
 CON_INVALID_PARAM			參數 "/%S" 已被指定。使用命令 "%S" 時，不可能指定此參數。輸入 "%S /HELP" 來看被使用的參數清單。
-CON_AMBIGIOUS_PARAM			"/%S": 參數名稱是不明確的。
-CON_AMBIGIOUS_PARAM_1		指定的參數名稱符合以下，被指定的做為命令 "%S" 參數的參數:
-CON_AMBIGIOUS_PARAM_2		請更嚴格地重新指定參數名稱。
+CON_AMBIGUOUS_PARAM			"/%S": 參數名稱是不明確的。
+CON_AMBIGUOUS_PARAM_1		指定的參數名稱符合以下，被指定的做為命令 "%S" 參數的參數:
+CON_AMBIGUOUS_PARAM_2		請更嚴格地重新指定參數名稱。
 
 
 # 不明命令
@@ -4338,7 +4338,7 @@ CMD_HELP_DESCRIPTION		[目的]
 CMD_HELP_USAGE				[使用方法]
 CMD_HELP_HELP				[說明]
 CMD_HELP_ARGS				[參數]
-CMD_PROPMT_PORT				輸入埠號: 
+CMD_PROMPT_PORT				輸入埠號: 
 CMD_EVAL_PORT				埠號無效。指定一個範圍是 1 到 65535 的埠號。
 CMD_CT_STD_COLUMN_1			項目
 CMD_CT_STD_COLUMN_2			價值
@@ -4373,6 +4373,7 @@ CMD_ACCOUNT_COLUMN_PROXY_PORT	代理伺服器的埠號
 CMD_ACCOUNT_COLUMN_PROXY_USERNAME	代理伺服器的用戶名
 CMD_ACCOUNT_COLUMN_SERVER_CERT_USE	驗證伺服器憑證
 CMD_ACCOUNT_COLUMN_SERVER_CERT_NAME	註冊的伺服器個人證書
+CMD_ACCOUNT_COLUMN_RETRY_ON_SERVER_CERT	Retry on Untrusted Server Certificate
 CMD_ACCOUNT_COLUMN_DEVICE_NAME	用於連接的設備名
 CMD_ACCOUNT_COLUMN_AUTH_TYPE	驗證類型
 CMD_ACCOUNT_COLUMN_AUTH_USERNAME	用戶名
@@ -4685,6 +4686,21 @@ CMD_ServerCipherSet_Args	ServerCipherSet [name]
 CMD_ServerCipherSet_[name]	指定設置加密和數位簽章的程式。可以使用的程式一覽，可以從 ServerCipherGet 指令中獲取。
 CMD_ServerCipherSet_PROMPT_NAME	指定的加密程式的名稱: 
 
+# TUNDownOnDisconnectEnable command
+CMD_TUNDownOnDisconnectEnable	Enable the Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectEnable_Help	This allows you to enable Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectEnable_Args	TUNDownOnDisconnectEnable
+
+# TUNDownOnDisconnectDisable command
+CMD_TUNDownOnDisconnectDisable	Disable the Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectDisable_Help	This allows you to disable Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectDisable_Args	TUNDownOnDisconnectDisable
+
+# TUNDownOnDisconnectGet command
+CMD_TUNDownOnDisconnectGet		Get status of the Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectGet_Help	This allows you to get status of the Turn TUN Interface Down on Client Disconnect Function.
+CMD_TUNDownOnDisconnectGet_Args	TUNDownOnDisconnectGet
+CMD_TUNDownOnDisconnectGet_COLUMN1	Put TUN down on disconnect
 
 # KeepEnable 命令
 CMD_KeepEnable				啟動 Internet 保持連接功能
@@ -5401,7 +5417,7 @@ CMD_CascadePolicySet_VALUE	設定協定的新值，如果協議是數值，請�
 CMD_CascadePolicySet_PROMPT_POLNAME	更改值得協定的名稱: 
 CMD_CascadePolicySet_PROMPT_POLVALUE	設置新值: 
 CMD_CascadePolicySet_Invalid_Name	指定的協定名稱 "%S" 是無效的。\n請運行 PolicyList 命令，您可以獲取設置協定的清單。
-CMD_CascadePolicySet_Invalid_Name_For_Cadcade	指定協議 "%S" 在設置級聯的安全協議時不可用。
+CMD_CascadePolicySet_Invalid_Name_For_Cascade	指定協議 "%S" 在設置級聯的安全協議時不可用。
 CMD_CascadePolicySet_Invalid_Range	協議 "%S" 請在 %s 範圍內選定。
 
 
@@ -6635,6 +6651,20 @@ CMD_AccountServerCertDisable_Args	AccountServerCertDisable [name]
 CMD_AccountServerCertDisable_[name]	指定要更改設置的連接設置名。
 
 
+# AccountRetryOnServerCertEnable command
+CMD_AccountRetryOnServerCertEnable	Enable VPN connection retry if server certificate is untrusted
+CMD_AccountRetryOnServerCertEnable_Help	When a VPN Connection Setting registered on the VPN Client is specified and that VPN Connection Setting connects to a VPN Server, use this to enable the option to retry connection if Server certificate cannot be trusted.
+CMD_AccountRetryOnServerCertEnable_Args	AccountRetryOnServerCertEnable [name]
+CMD_AccountRetryOnServerCertEnable_[name]	Specify the name of the VPN Connection Setting whose setting you want to change.
+
+
+# AccountRetryOnServerCertDisable command
+CMD_AccountRetryOnServerCertDisable	Enable VPN connection retry if server certificate is invalid
+CMD_AccountRetryOnServerCertDisable_Help	When a VPN Connection Setting registered on the VPN Client is specified and that VPN Connection Setting connects to a VPN Server, use this to disable the option to retry connection if Server certificate cannot be trusted.
+CMD_AccountRetryOnServerCertDisable_Args	AccountRetryOnServerCertEnable [name]
+CMD_AccountRetryOnServerCertDisable_[name]	Specify the name of the VPN Connection Setting whose setting you want to change.
+
+
 # AccountServerCertSet 命令
 CMD_AccountServerCertSet	設置連接設置的伺服器固有證明書
 CMD_AccountServerCertSet_Help	指定註冊到 VPN Client 的連接設置，其連接設置連接到 VPN Server 時，預先註冊與連接目標的 VPN Server 提交的 SSL 證書相同的證書。\n如果啟動了連接設置的伺服器憑證驗證選項，可以預先將連接目標伺服器的 SSL 證書以此指令保存在連接設置的設置內，或需要將伺服器的 SSL 證書簽名了的根證書，以 CAAdd 指令註冊到虛擬 HUB 信任的證明機構的證書列表中。\n驗證連接設置的伺服器憑證的選項處於啟動狀態，連接了的 VPN Server 的證書不可信時，立即解除連接，反復重試。
@@ -6755,7 +6785,7 @@ CMD_AccountRetrySet_[name]	指定要更改設置的連接設置名。
 CMD_AccountRetrySet_NUM		指定連續進行重新連接的次數。 如指定 "999"，重試次數為無限次 (永久連接)。如指定 "0"，不進行重新連接。
 CMD_AccountRetrySet_INTERVAL	重新進行連接時，設置距離上次斷開或連接失敗後需多少秒開始重新連接處理。
 CMD_AccountRetrySet_PROMPT_NUM	重新連接次數 ("999" 為無限次): 
-CMD_AccountRetrySet_PROMPY_INTERVAL	重新連接間隔 (秒): 
+CMD_AccountRetrySet_PROMPT_INTERVAL	重新連接間隔 (秒): 
 CMD_AccountRetrySet_EVAL_INTERVAL	請指定 5 秒以上的重新連接間隔。
 
 
@@ -7082,7 +7112,7 @@ SW_PERFORM_MSG_IMPORTING_ACCOUNT		在簡單安裝工具中的導入嵌入的 VPN
 SW_PERFORM_MSG_DELETE_SETUP_INFO		刪除安裝資訊和日誌...
 SW_PERFORM_MSG_WRITE_LOG				寫入設置日誌...
 SW_PERFORM_MSG_COPY_ERROR				複製檔 "%s" 失敗。
-SW_PERFORM_MSG_CRAETE_LINK_ERROR		創建快捷方式檔 "%s" 失敗。\r\n\r\n您要重試嗎？
+SW_PERFORM_MSG_CREATE_LINK_ERROR		創建快捷方式檔 "%s" 失敗。\r\n\r\n您要重試嗎？
 SW_PERFORM_MSG_WRITE_LOG_ERROR			安裝日誌檔 "%s" 創建中。\r\n\r\n您要重試嗎？
 SW_PERFORM_MSG_STOP_SVC_ERROR			關閉 "%s" 服務(內部名: "%S")失敗。
 SW_PERFORM_MSG_START_SVC_ERROR			開啟 "%s" 服務(內部名: "%S")失敗。

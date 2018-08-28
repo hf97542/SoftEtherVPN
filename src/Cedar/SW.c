@@ -665,7 +665,7 @@ bool SwSfxCopyVgFiles(HWND hWnd, wchar_t *src, wchar_t *dst)
 	}
 
 	msg = L"The file \"%s\" was not found on the directory which the installer \"%s\" is located on.\r\n\r\n"
-		L"To continue the installation, the file \"%s\" is required on the same direcotry.\r\n"
+		L"To continue the installation, the file \"%s\" is required on the same directory.\r\n"
 		L"If you have extracted the installer from a ZIP archive, you have to also extract the file \"%s\" from the ZIP archive together.";
 
 	MsgBoxEx(hWnd, MB_ICONINFORMATION, msg, srcfilename, exefilename, srcfilename, srcfilename);
@@ -896,9 +896,7 @@ void SwGenerateDefaultSfxFileName(wchar_t *name, UINT size)
 	}
 
 	UniFormat(name, size, L"easy-" GC_SW_SOFTETHER_PREFIX_W L"vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.exe",
-		CEDAR_VER / 100,
-		CEDAR_VER % 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 }
 
@@ -912,9 +910,7 @@ void SwGenerateDefaultZipFileName(wchar_t *name, UINT size)
 	}
 
 	UniFormat(name, size, L"web-" GC_SW_SOFTETHER_PREFIX_W L"vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.zip",
-		CEDAR_VER / 100,
-		CEDAR_VER % 100,
-		CEDAR_BUILD,
+		CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 		BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 }
 
@@ -1759,7 +1755,7 @@ UINT SwFinish(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard,
 	return 0;
 }
 
-// Error occuring screen
+// Error occurring screen
 UINT SwError(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WIZARD_PAGE *wizard_page, void *param)
 {
 	SW *sw = (SW *)param;
@@ -2941,15 +2937,13 @@ bool SwWebMain(SW *sw, WIZARD_PAGE *wp)
 		char package_name[MAX_SIZE];
 		ZIP_PACKER *z = NULL;
 
-		ToStr(ver_major, CEDAR_VER / 100);
-		ToStr(ver_minor, CEDAR_VER % 100);
-		ToStr(ver_build, CEDAR_BUILD);
+		ToStr(ver_major, CEDAR_VERSION_MAJOR);
+		ToStr(ver_minor, CEDAR_VERSION_MINOR);
+		ToStr(ver_build, CEDAR_VERSION_BUILD);
 
 		Format(package_name, sizeof(package_name),
 			GC_SW_SOFTETHER_PREFIX "vpnclient-v%u.%02u-%u-%04u-%02u-%02u-windows.exe",
-			CEDAR_VER / 100,
-			CEDAR_VER % 100,
-			CEDAR_BUILD,
+			CEDAR_VERSION_MAJOR, CEDAR_VERSION_MINOR, CEDAR_VERSION_BUILD,
 			BUILD_DATE_Y, BUILD_DATE_M, BUILD_DATE_D);
 
 		GetCurrentLang(&current_lang);
@@ -3947,7 +3941,7 @@ L_RETRY_LOG:
 
 		sw->LogFile->IsSystemMode = sw->IsSystemMode;
 		sw->LogFile->Component = sw->CurrentComponent;
-		sw->LogFile->Build = CEDAR_BUILD;
+		sw->LogFile->Build = CEDAR_VERSION_BUILD;
 
 		if (SwSaveLogFile(sw, log_filename, sw->LogFile) == false)
 		{
@@ -3978,7 +3972,7 @@ L_RETRY_LOG:
 		MsRegWriteStrEx2W(sw->IsSystemMode ? REG_LOCAL_MACHINE : REG_CURRENT_USER,
 			keyname, "InstalledDir", sw->InstallDir, false, true);
 		MsRegWriteIntEx2(sw->IsSystemMode ? REG_LOCAL_MACHINE : REG_CURRENT_USER,
-			keyname, "InstalledBuild", CEDAR_BUILD, false, true);
+			keyname, "InstalledBuild", CEDAR_VERSION_BUILD, false, true);
 
 		// Set the language to registry
 		MsRegWriteStrEx2(REG_CURRENT_USER, SW_REG_KEY, "Last User Language",
@@ -4155,7 +4149,7 @@ L_RETRY_LINK:
 		{
 			// Show the error message if it fails
 			UINT msgret;
-			UniFormat(tmp, sizeof(tmp), _UU("SW_PERFORM_MSG_CRAETE_LINK_ERROR"), lnk_fullpath);
+			UniFormat(tmp, sizeof(tmp), _UU("SW_PERFORM_MSG_CREATE_LINK_ERROR"), lnk_fullpath);
 			msgret = SwPerformMsgBox(wp, MB_ICONEXCLAMATION | MB_YESNO, tmp);
 
 			if (msgret == IDYES)
@@ -5032,7 +5026,7 @@ UINT SwDir(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WI
 			break;
 		}
 
-		if (logfile != NULL && (logfile->Build > CEDAR_BUILD) && UniIsEmptyStr(sw->auto_setting_path) == false &&
+		if (logfile != NULL && (logfile->Build > CEDAR_VERSION_BUILD) && UniIsEmptyStr(sw->auto_setting_path) == false &&
 			sw->CurrentComponent->Id == SW_CMP_VPN_CLIENT && logfile->Component->Id == SW_CMP_VPN_CLIENT)
 		{
 			// In the case of the VPN Client, show a message if a newer version is installed and
@@ -5054,7 +5048,7 @@ UINT SwDir(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, WIZARD *wizard, WI
 			{
 				errmsg = _UU("SW_DIR_DST_IS_OTHER_PRODUCT");
 			}
-			else if ((skip_ver_check == false) && (logfile->Build > CEDAR_BUILD))
+			else if ((skip_ver_check == false) && (logfile->Build > CEDAR_VERSION_BUILD))
 			{
 				errmsg = _UU("SW_DIR_DST_IS_NEWER");
 			}

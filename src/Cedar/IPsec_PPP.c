@@ -775,7 +775,7 @@ bool PPPParseUsername(CEDAR *cedar, char *src_username, ETHERIP_ID *dst)
 	char src[MAX_SIZE];
 	// Validate arguments
 	Zero(dst, sizeof(ETHERIP_ID));
-	if (cedar == NULL || src == NULL || dst == NULL)
+	if (cedar == NULL || dst == NULL)
 	{
 		return false;
 	}
@@ -1318,7 +1318,7 @@ PPP_PACKET *PPPProcessRequestPacket(PPP_SESSION *p, PPP_PACKET *req)
 							t = 1;
 						}
 
-						p->DhcpRenewInterval = (UINT64)(t * 1000);
+						p->DhcpRenewInterval = t * (UINT64)1000;
 						p->DhcpNextRenewTime = Tick64() + p->DhcpRenewInterval;
 
 						if (true)
@@ -2142,11 +2142,6 @@ PPP_PACKET *ParsePPPPacket(void *data, UINT size)
 
 	buf = (UCHAR *)data;
 
-	// Address
-	if (size < 1)
-	{
-		goto LABEL_ERROR;
-	}
 	if (buf[0] != 0xff)
 	{
 		goto LABEL_ERROR;
@@ -2317,10 +2312,6 @@ PPP_LCP *ParseLCP(USHORT protocol, void *data, UINT size)
 	c->OptionList = NewListFast(NULL);
 
 	// Code
-	if (size < 1)
-	{
-		goto LABEL_ERROR;
-	}
 	c->Code = buf[0];
 	buf++;
 	size--;
@@ -2370,20 +2361,10 @@ PPP_LCP *ParseLCP(USHORT protocol, void *data, UINT size)
 
 			Zero(&o, sizeof(o));
 
-			// Type
-			if (len < 1)
-			{
-				goto LABEL_ERROR;
-			}
 			o.Type = buf[0];
 			buf++;
 			len--;
 
-			// Length
-			if (len < 1)
-			{
-				goto LABEL_ERROR;
-			}
 			o.DataSize = buf[0];
 			if (o.DataSize < 2)
 			{
@@ -2660,18 +2641,6 @@ void GenerateNtPasswordHash(UCHAR *dst, char *password)
 
 // Generate the MS-CHAPv2 server-side challenge
 void MsChapV2Server_GenerateChallenge(UCHAR *dst)
-{
-	// Validate arguments
-	if (dst == NULL)
-	{
-		return;
-	}
-
-	Rand(dst, 16);
-}
-
-// Generate the MS-CHAPv2 client-side challenge
-void MsChapV2Client_GenerateChallenge(UCHAR *dst)
 {
 	// Validate arguments
 	if (dst == NULL)

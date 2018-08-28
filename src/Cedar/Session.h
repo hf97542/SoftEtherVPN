@@ -217,7 +217,6 @@ struct SESSION
 	UINT64 NextConnectionTime;		// Time to put next additional connection
 	IP ServerIP;					// IP address of the server
 	bool ClientModeAndUseVLan;		// Use a virtual LAN card in client mode
-	bool UseSSLDataEncryption;		// Use SSL data encryption
 	LOCK *TrafficLock;				// Traffic data lock
 	LINK *Link;						// A reference to the link object
 	SNAT *SecureNAT;				// A reference to the SecureNAT object
@@ -255,7 +254,6 @@ struct SESSION
 	char SessionKeyStr[64];			// Session key string
 	UINT MaxConnection;				// Maximum number of concurrent TCP connections
 	bool UseEncrypt;				// Use encrypted communication
-	bool UseFastRC4;				// Use high speed RC4 encryption
 	bool UseCompress;				// Use data compression
 	bool HalfConnection;			// Half connection mode
 	bool QoS;						// VoIP / QoS
@@ -265,9 +263,9 @@ struct SESSION
 	UINT NumDisconnected;			// Number of socket disconnection
 	bool NoReconnectToSession;		// Disable to reconnect to the session
 	char UnderlayProtocol[64];		// Physical communication protocol
-	UINT64 FirstConnectionEstablisiedTime;	// Connection completion time of the first connection
+	UINT64 FirstConnectionEstablishedTime;	// Connection completion time of the first connection
 	UINT64 CurrentConnectionEstablishTime;	// Completion time of this connection
-	UINT NumConnectionsEatablished;	// Number of connections established so far
+	UINT NumConnectionsEstablished;	// Number of connections established so far
 	UINT AdjustMss;					// MSS adjustment value
 	bool IsVPNClientAndVLAN_Win32;	// Is the VPN Client session with a VLAN card (Win32)
 
@@ -309,7 +307,7 @@ struct SESSION
 	LIST *DelayedPacketList;		// Delayed packet list
 	UINT Flag1;
 
-	USER *NumLoginIncrementUserObject;	// User objects to increment the nymber of logins
+	USER *NumLoginIncrementUserObject;	// User objects to increment the number of logins
 	HUB *NumLoginIncrementHubObject;	// Virtual HUB object to increment the number of logins
 	UINT64 NumLoginIncrementTick;		// Time to perform increment a number of log
 
@@ -317,13 +315,15 @@ struct SESSION
 	char FirstTimeHttpRedirectUrl[128];	// URL for redirection only the first time
 	UINT FirstTimeHttpAccessCheckIp;	// IP address for access checking
 
-	// To examine the maximum number of alowed logging target packets per minute
+	// To examine the maximum number of allowed logging target packets per minute
 	UINT64 MaxLoggedPacketsPerMinuteStartTick;	// Inspection start time
 	UINT CurrentNumPackets;				// Current number of packets
 
 	// Measures for D-Link bug
 	UINT64 LastDLinkSTPPacketSendTick;	// Last D-Link STP packet transmission time
 	UCHAR LastDLinkSTPPacketDataHash[MD5_SIZE];	// Last D-Link STP packet hash
+
+	bool *NicDownOnDisconnect;		// Pointer to client configuration parameter. NULL for non-clients.
 };
 
 // Password dialog
@@ -399,8 +399,8 @@ struct UI_CHECKCERT
 
 
 // Function prototype
-SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, struct ACCOUNT *account);
-SESSION *NewClientSession(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa);
+SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, struct ACCOUNT *account, bool *NicDownOnDisconnect);
+SESSION *NewClientSession(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, bool *NicDownOnDisconnect);
 SESSION *NewRpcSession(CEDAR *cedar, CLIENT_OPTION *option);
 SESSION *NewRpcSessionEx(CEDAR *cedar, CLIENT_OPTION *option, UINT *err, char *client_str);
 SESSION *NewRpcSessionEx2(CEDAR *cedar, CLIENT_OPTION *option, UINT *err, char *client_str, void *hWnd);

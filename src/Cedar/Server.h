@@ -277,7 +277,7 @@ struct SERVER
 	bool DontBackupConfig;				// Do not save a backup of the configuration automatically
 	bool BackupConfigOnlyWhenModified;	// Save a backup of the configuration only if there is a modification
 	UINT ConfigRevision;				// Configuration file revision
-	bool DisableDosProction;			// Disable the DoS attack protection
+	bool DisableDosProtection;			// Disable the DoS attack protection
 	UCHAR MyRandomKey[SHA1_SIZE];		// Their own random key
 	bool FarmControllerInited;			// Initialization of farm controller has been completed
 	bool DisableDeadLockCheck;			// Disable the deadlock check
@@ -293,7 +293,6 @@ struct SERVER
 	bool DisableNatTraversal;			// Disable the NAT-traversal feature
 	bool EnableVpnOverIcmp;				// VPN over ICMP is enabled
 	bool EnableVpnOverDns;				// VPN over DNS is enabled
-	bool DisableIntelAesAcceleration;	// Disable the Intel AES acceleration
 	bool NoMoreSave;					// Do not save any more
 	bool EnableConditionalAccept;		// Apply the Conditional Accept the Listener
 	bool EnableLegacySSL;				// Enable Legacy SSL

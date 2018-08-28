@@ -436,7 +436,7 @@ void NnCombineIp(NATIVE_NAT *t, IP_COMBINE *c, UINT offset, void *data, UINT siz
 
 	if (last_packet)
 	{
-		// If No More Flagment packet arrives, the size of this datagram is finalized
+		// If No More Fragment packet arrives, the size of this datagram is finalized
 		c->Size = offset + size;
 	}
 
@@ -1072,9 +1072,9 @@ void NnFragmentedIpReceived(NATIVE_NAT *t, PKT *packet)
 			c = NnInsertIpCombine(
 				t, ip->SrcIP, ip->DstIP, Endian16(ip->Identification), ip->Protocol, packet->BroadcastPacket,
 				ip->TimeToLive, false);
-			c->MaxL3Size = MAX(c->MaxL3Size, l3_size);
 			if (c != NULL)
 			{
+				c->MaxL3Size = MAX(c->MaxL3Size, l3_size);
 				NnCombineIp(t, c, offset, data, size, last_packet, head_ip_header_data, head_ip_header_size);
 			}
 		}
@@ -1178,7 +1178,7 @@ void NnIpSendFragmentedForInternet(NATIVE_NAT *t, UCHAR ip_protocol, UINT src_ip
 	ip->TypeOfService = DEFAULT_IP_TOS;
 	ip->TotalLength = Endian16((USHORT)(size + IP_HEADER_SIZE));
 	ip->Identification = Endian16(id);
-	ip->FlagsAndFlagmentOffset[0] = ip->FlagsAndFlagmentOffset[1] = 0;
+	ip->FlagsAndFragmentOffset[0] = ip->FlagsAndFragmentOffset[1] = 0;
 	IPV4_SET_OFFSET(ip, (offset / 8));
 	if ((offset + size) >= total_size)
 	{
@@ -1995,12 +1995,9 @@ LABEL_RESTART:
 			}
 			Unlock(t->CancelLock);
 
-			if (c != NULL)
-			{
-				Cancel(c);
+			Cancel(c);
 
-				ReleaseCancel(c);
-			}
+			ReleaseCancel(c);
 		}
 
 		if (IsTubeConnected(ipc->Sock->RecvTube) == false || IsTubeConnected(ipc->Sock->SendTube) == false)
@@ -4431,7 +4428,7 @@ void NatTcpConnectThread(THREAD *t, void *p)
 
 	// Attempt to connect to the TCP host
 	Debug("NatTcpConnect Connecting to %s:%u\n", hostname, port_number);
-	sock = ConnectEx3(hostname, port_number, 0, &n->NatTcpCancelFlag, NULL, NULL, false, false, true);
+	sock = ConnectEx3(hostname, port_number, 0, &n->NatTcpCancelFlag, NULL, NULL, false, true);
 	if (sock == NULL)
 	{
 		// Connection failure
@@ -5009,7 +5006,7 @@ void PollingNatTcp(VH *v, NAT_ENTRY *n)
 			if (n->TcpFinished)
 			{
 				// Disconnect if all data transmission has completed
-				if (n->SendFifo->size == 0)
+				if (n->SendFifo->size == 0 && n->RecvFifo->size == 0)
 				{
 					n->TcpStatus = NAT_TCP_SEND_RESET;
 				}
@@ -7637,7 +7634,7 @@ void CombineIp(VH *v, IP_COMBINE *c, UINT offset, void *data, UINT size, bool la
 
 	if (last_packet)
 	{
-		// If No More Flagment packet arrives, the size of this datagram is finalized
+		// If No More Fragment packet arrives, the size of this datagram is finalized
 		c->Size = offset + size;
 	}
 
@@ -8847,7 +8844,7 @@ void SendFragmentedIp(VH *v, UINT dest_ip, UINT src_ip, USHORT id, USHORT total_
 	ip->TypeOfService = DEFAULT_IP_TOS;
 	ip->TotalLength = Endian16((USHORT)(size + IP_HEADER_SIZE));
 	ip->Identification = Endian16(id);
-	ip->FlagsAndFlagmentOffset[0] = ip->FlagsAndFlagmentOffset[1] = 0;
+	ip->FlagsAndFragmentOffset[0] = ip->FlagsAndFragmentOffset[1] = 0;
 	IPV4_SET_OFFSET(ip, (offset / 8));
 	if ((offset + size) >= total_size)
 	{
@@ -10306,12 +10303,12 @@ void GenMacAddress(UCHAR *mac)
 	Hash(hash, b->Buf, b->Size, true);
 
 	// Generate a MAC address
-	mac[0] = 0x00;
-	mac[1] = 0xAC;		// AC hurray
-	mac[2] = hash[0];
-	mac[3] = hash[1];
-	mac[4] = hash[2];
-	mac[5] = hash[3];
+	mac[0] = 0x5E;
+	mac[1] = hash[0];
+	mac[2] = hash[1];
+	mac[3] = hash[2];
+	mac[4] = hash[3];
+	mac[5] = hash[4];
 
 	FreeBuf(b);
 }

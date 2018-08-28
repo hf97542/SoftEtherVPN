@@ -266,7 +266,7 @@ bool LinkPaPutPacket(SESSION *s, void *data, UINT size)
 	k->Flag1++;
 	if ((k->Flag1 % 32) == 0)
 	{
-		// Ommit for performance
+		// Omit for performance
 		UINT current_num;
 		int diff;
 
@@ -313,7 +313,7 @@ bool LinkPaPutPacket(SESSION *s, void *data, UINT size)
 			}
 			else
 			{
-				InsertReveicedBlockToQueue(server_connection, block, true);
+				InsertReceivedBlockToQueue(server_connection, block, true);
 			}
 		}
 	}
@@ -612,7 +612,7 @@ void StartLink(LINK *k)
 	pa->Param = (void *)k;
 	LockLink(k);
 	{
-		k->ClientSession = NewClientSession(k->Cedar, k->Option, k->Auth, pa);
+		k->ClientSession = NewClientSession(k->Cedar, k->Option, k->Auth, pa, NULL);
 	}
 	UnlockLink(k);
 }

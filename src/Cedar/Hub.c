@@ -1835,7 +1835,7 @@ ESCAPE:
 	return;
 }
 
-// Eable / disable the SecureNAT
+// Enable / disable the SecureNAT
 void EnableSecureNAT(HUB *h, bool enable)
 {
 	EnableSecureNATEx(h, enable, false);
@@ -6098,7 +6098,7 @@ void IntoTrafficLimiter(TRAFFIC_LIMITER *tr, PKT *p)
 	}
 
 	// Value increase
-	tr->Value += (UINT64)(p->PacketSize * 8);
+	tr->Value += p->PacketSize * (UINT64)8;
 }
 
 // The bandwidth reduction by traffic limiter

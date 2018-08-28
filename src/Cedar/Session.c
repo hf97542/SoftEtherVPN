@@ -209,14 +209,14 @@ void SessionMain(SESSION *s)
 	s->LastCommTime = Tick64();
 	if (s->ServerMode == false)
 	{
-		s->NextConnectionTime = Tick64() + (UINT64)(s->ClientOption->AdditionalConnectionInterval * 1000);
+		s->NextConnectionTime = Tick64() + s->ClientOption->AdditionalConnectionInterval * (UINT64)1000;
 	}
 
-	s->NumConnectionsEatablished++;
+	s->NumConnectionsEstablished++;
 	s->CurrentConnectionEstablishTime = Tick64();
-	if (s->FirstConnectionEstablisiedTime == 0)
+	if (s->FirstConnectionEstablishedTime == 0)
 	{
-		s->FirstConnectionEstablisiedTime = Tick64();
+		s->FirstConnectionEstablishedTime = Tick64();
 	}
 
 	if (s->ServerMode == false && s->Cedar->Client != NULL)
@@ -919,7 +919,7 @@ void IncrementUserTraffic(HUB *hub, char *username, SESSION *s)
 	Unlock(s->TrafficLock);
 }
 
-// Cummulate the traffic information of the connection
+// Cumulate the traffic information of the connection
 void AddTrafficForSession(SESSION *s, TRAFFIC *t)
 {
 	HUB *h;
@@ -980,7 +980,7 @@ void ClientAdditionalConnectChance(SESSION *s)
 		return;
 	}
 
-	if (s->IsRUDPSession && (s->Connection->AdditionalConnectionFailedCounter > MAX_ADDITONAL_CONNECTION_FAILED_COUNTER))
+	if (s->IsRUDPSession && (s->Connection->AdditionalConnectionFailedCounter > MAX_ADDITIONAL_CONNECTION_FAILED_COUNTER))
 	{
 		// Not to make a large amount of repeated connection retry within a certain time in the case of R-UDP session
 		return;
@@ -1006,7 +1006,7 @@ void ClientAdditionalConnectChance(SESSION *s)
 				(s->NextConnectionTime <= now))
 			{
 				// Start the work to put an additional connection
-				s->NextConnectionTime = now + (UINT64)(s->ClientOption->AdditionalConnectionInterval * 1000);
+				s->NextConnectionTime = now + s->ClientOption->AdditionalConnectionInterval * (UINT64)1000U;
 				SessionAdditionalConnect(s);
 			}
 			else
@@ -1381,6 +1381,13 @@ void CleanupSession(SESSION *s)
 		FreePacketAdapter(s->PacketAdapter);
 	}
 
+#ifdef OS_UNIX
+	if (s->NicDownOnDisconnect != NULL && *s->NicDownOnDisconnect)
+	{
+		UnixVLanSetState(s->ClientOption->DeviceName, false);
+	}
+#endif
+
 	if (s->OldTraffic != NULL)
 	{
 		FreeTraffic(s->OldTraffic);
@@ -1528,6 +1535,13 @@ void ClientThread(THREAD *t, void *param)
 
 		CLog(s->Cedar->Client, "LC_CONNECT_ERROR", s->ClientOption->AccountName,
 			GetUniErrorStr(s->Err), s->Err);
+
+#ifdef OS_UNIX
+		if (s->NicDownOnDisconnect != NULL && *s->NicDownOnDisconnect)
+		{
+			UnixVLanSetState(s->ClientOption->DeviceName, false);
+		}
+#endif
 
 		if (s->LinkModeClient && s->Link != NULL)
 		{
@@ -1953,7 +1967,7 @@ SESSION *NewRpcSessionEx2(CEDAR *cedar, CLIENT_OPTION *option, UINT *err, char *
 }
 
 // Create a client session
-SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, ACCOUNT *account)
+SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, ACCOUNT *account, bool *NicDownOnDisconnect)
 {
 	SESSION *s;
 	THREAD *t;
@@ -2081,6 +2095,8 @@ SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *au
 		s->ClientOption->NumRetry = 0;
 	}
 
+	s->NicDownOnDisconnect = NicDownOnDisconnect;
+
 	// Create a client thread
 	t = NewThread(ClientThread, (void *)s);
 	WaitThreadInit(t);
@@ -2088,9 +2104,9 @@ SESSION *NewClientSessionEx(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *au
 
 	return s;
 }
-SESSION *NewClientSession(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa)
+SESSION *NewClientSession(CEDAR *cedar, CLIENT_OPTION *option, CLIENT_AUTH *auth, PACKET_ADAPTER *pa, bool *NicDownOnDisconnect)
 {
-	return NewClientSessionEx(cedar, option, auth, pa, NULL);
+	return NewClientSessionEx(cedar, option, auth, pa, NULL, NicDownOnDisconnect);
 }
 
 // Get the session from the 32bit session key

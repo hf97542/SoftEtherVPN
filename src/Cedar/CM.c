@@ -123,6 +123,7 @@
 
 #define	_WIN32_WINNT		0x0502
 #define	WINVER				0x0502
+#define	SECURITY_WIN32
 #include <winsock2.h>
 #include <windows.h>
 #include <Iphlpapi.h>
@@ -136,6 +137,7 @@
 #include <psapi.h>
 #include <wtsapi32.h>
 #include <Ntsecapi.h>
+#include <security.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -631,7 +633,7 @@ void CmRefreshEasy()
 	SendMessage(cm->hEasyWnd, WM_CM_EASY_REFRESH, 0, 0);
 }
 
-// Initialze the Simple Connect Manager
+// Initialize the Simple Connect Manager
 void CmEasyDlgInit(HWND hWnd, CM_EASY_DLG *d)
 {
 	HFONT hFontForList;
@@ -4417,7 +4419,7 @@ UINT CmMainWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *p
 					if (CmGetNumConnected(hWnd) == 0)
 					{
 						cm->Update = InitUpdateUi(_UU("PRODUCT_NAME_VPN_CMGR"), NAME_OF_VPN_CLIENT_MANAGER, NULL,
-							GetCurrentBuildDate(), CEDAR_BUILD, CEDAR_VER, ((cm->Client == NULL) ? NULL : cm->Client->ClientId),
+							GetCurrentBuildDate(), CEDAR_VERSION_BUILD, GetCedarVersionNumber(), ((cm->Client == NULL) ? NULL : cm->Client->ClientId),
 							true);
 					}
 				}
@@ -4480,7 +4482,7 @@ UINT CmMainWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, void *p
 // Specify the notification service to the foreground process
 void CmSetForegroundProcessToCnService()
 {
-	if (cm->MenuPopuping)
+	if (cm->PopupMenuOpen)
 	{
 		return;
 	}
@@ -4657,7 +4659,7 @@ void CmShowTrayMenu(HWND hWnd)
 		return;
 	}
 
-	cm->MenuPopuping = true;
+	cm->PopupMenuOpen = true;
 
 	locked = cm->CmSetting.LockMode;
 	easy = cm->CmSetting.EasyMode;
@@ -4786,7 +4788,7 @@ void CmShowTrayMenu(HWND hWnd)
 
 	DestroyMenu(h);
 
-	cm->MenuPopuping = false;
+	cm->PopupMenuOpen = false;
 }
 
 // Hide or show the main window
@@ -5718,6 +5720,12 @@ void CmMainWindowOnCommandEx(HWND hWnd, WPARAM wParam, LPARAM lParam, bool easy)
 			// Installation is prohibited
 			break;
 		}
+		// Warning message
+		if (MsgBox(hWnd, MB_ICONINFORMATION | MB_OKCANCEL, _UU("CM_VLAN_REINSTALL_MSG")) == IDCANCEL)
+		{
+			// Cancel
+			break;
+		}
 		index = LvGetSelected(hWnd, L_VLAN);
 		if (index != INFINITE)
 		{
@@ -6234,6 +6242,7 @@ void CmExportAccount(HWND hWnd, wchar_t *account_name)
 		t.ClientAuth = a->ClientAuth;
 		t.StartupAccount = a->Startup;
 		t.CheckServerCert = a->CheckServerCert;
+		t.RetryOnServerCert = a->RetryOnServerCert;
 		t.ServerCert = a->ServerCert;
 		t.ClientOption->FromAdminPack = false;
 
@@ -6364,7 +6373,6 @@ void CmImportAccountMainEx(HWND hWnd, wchar_t *filename, bool overwrite)
 					t->ClientOption->RequireMonitorMode = old_option->RequireMonitorMode;
 					t->ClientOption->RequireBridgeRoutingMode = old_option->RequireBridgeRoutingMode;
 					t->ClientOption->DisableQoS = old_option->DisableQoS;
-					t->ClientOption->NoTls1 = old_option->NoTls1;
 
 					// Inherit the authentication data
 					CiFreeClientAuth(t->ClientAuth);
@@ -6373,6 +6381,7 @@ void CmImportAccountMainEx(HWND hWnd, wchar_t *filename, bool overwrite)
 					// Other Settings
 					t->StartupAccount = get.StartupAccount;
 					t->CheckServerCert = get.CheckServerCert;
+					t->RetryOnServerCert = get.RetryOnServerCert;
 					if (t->ServerCert != NULL)
 					{
 						FreeX(t->ServerCert);
@@ -6481,6 +6490,7 @@ void CmCopyAccount(HWND hWnd, wchar_t *account_name)
 		c.ServerCert = CloneX(a->ServerCert);
 	}
 	c.CheckServerCert = a->CheckServerCert;
+	c.RetryOnServerCert = a->RetryOnServerCert;
 	c.StartupAccount = false;		// Don't copy the startup attribute
 
 	CALL(hWnd, CcCreateAccount(cm->Client, &c));
@@ -6976,8 +6986,6 @@ void CmEditAccountDlgUpdate(HWND hWnd, CM_ACCOUNT *a)
 	}
 	a->ClientOption->RetryInterval = GetInt(hWnd, E_RETRY_SPAN);
 
-	a->ClientOption->NoTls1 = IsChecked(hWnd, R_NOTLS1);
-
 	// Information determining
 	if (UniStrLen(a->ClientOption->AccountName) == 0 && a->NatMode == false)
 	{
@@ -7430,8 +7438,6 @@ void CmEditAccountDlgInit(HWND hWnd, CM_ACCOUNT *a)
 		}
 	}
 	SetIntEx(hWnd, E_RETRY_SPAN, a->ClientOption->RetryInterval);
-
-	Check(hWnd, R_NOTLS1, a->ClientOption->NoTls1);
 
 	// Title
 	if (a->NatMode == false)
@@ -8891,6 +8897,7 @@ CM_ACCOUNT *CmGetExistAccountObject(HWND hWnd, wchar_t *account_name)
 	a = ZeroMalloc(sizeof(CM_ACCOUNT));
 	a->EditMode = true;
 	a->CheckServerCert = c.CheckServerCert;
+	a->RetryOnServerCert = c.RetryOnServerCert;
 	a->Startup = c.StartupAccount;
 	if (c.ServerCert != NULL)
 	{
@@ -8920,6 +8927,7 @@ CM_ACCOUNT *CmCreateNewAccountObject(HWND hWnd)
 	a = ZeroMalloc(sizeof(CM_ACCOUNT));
 	a->EditMode = false;
 	a->CheckServerCert = false;
+	a->RetryOnServerCert = false;
 	a->Startup = false;
 	a->ClientOption = ZeroMalloc(sizeof(CLIENT_OPTION));
 
@@ -9393,8 +9401,8 @@ void CmPrintStatusToListViewEx(LVB *b, RPC_CLIENT_GET_CONNECTION_STATUS *s, bool
 
 	GetDateTimeStrEx64(tmp, sizeof(tmp), SystemToLocal64(s->StartTime), NULL);
 	LvInsertAdd(b, 0, NULL, 2, _UU("CM_ST_START_TIME"), tmp);
-	GetDateTimeStrEx64(tmp, sizeof(tmp), SystemToLocal64(s->FirstConnectionEstablisiedTime), NULL);
-	LvInsertAdd(b, 0, NULL, 2, _UU("CM_ST_FIRST_ESTAB_TIME"), s->FirstConnectionEstablisiedTime == 0 ? _UU("CM_ST_NONE") : tmp);
+	GetDateTimeStrEx64(tmp, sizeof(tmp), SystemToLocal64(s->FirstConnectionEstablishedTime), NULL);
+	LvInsertAdd(b, 0, NULL, 2, _UU("CM_ST_FIRST_ESTAB_TIME"), s->FirstConnectionEstablishedTime == 0 ? _UU("CM_ST_NONE") : tmp);
 
 	if (s->Connected)
 	{
@@ -9404,7 +9412,7 @@ void CmPrintStatusToListViewEx(LVB *b, RPC_CLIENT_GET_CONNECTION_STATUS *s, bool
 
 	if (server_mode == false)
 	{
-		UniFormat(tmp, sizeof(tmp), _UU("CM_ST_NUM_STR"), s->NumConnectionsEatablished);
+		UniFormat(tmp, sizeof(tmp), _UU("CM_ST_NUM_STR"), s->NumConnectionsEstablished);
 		LvInsertAdd(b, 0, NULL, 2, _UU("CM_ST_NUM_ESTABLISHED"), tmp);
 	}
 
@@ -10386,7 +10394,7 @@ void CmRefreshAccountListEx2(HWND hWnd, bool easy, bool style_changed)
 	UINT num_connecting = 0, num_connected = 0;
 	wchar_t tmp[MAX_SIZE];
 	wchar_t new_inserted_item[MAX_ACCOUNT_NAME_LEN + 1];
-	bool select_new_insteted_item = true;
+	bool select_new_inserted_item = true;
 	// Validate arguments
 	if (hWnd == NULL)
 	{
@@ -10435,7 +10443,7 @@ void CmRefreshAccountListEx2(HWND hWnd, bool easy, bool style_changed)
 
 	if (LvNum(hWnd, L_ACCOUNT) == 0)
 	{
-		select_new_insteted_item = false;
+		select_new_inserted_item = false;
 	}
 
 	// Enumerate the account list
@@ -10573,7 +10581,7 @@ void CmRefreshAccountListEx2(HWND hWnd, bool easy, bool style_changed)
 
 		CiFreeClientEnumAccount(&a);
 
-		if (select_new_insteted_item)
+		if (select_new_inserted_item)
 		{
 			if (UniStrLen(new_inserted_item) >= 1)
 			{
@@ -11163,7 +11171,7 @@ void CmMainWindowOnInit(HWND hWnd)
 
 	UniStrCpy(cm->StatudBar1, sizeof(cm->StatudBar1), _UU("CM_TITLE"));
 	UniStrCpy(cm->StatudBar2, sizeof(cm->StatudBar2), _UU("CM_CONN_NO"));
-	UniFormat(cm->StatudBar3, sizeof(cm->StatudBar3), _UU("CM_PRODUCT_NAME"), CEDAR_BUILD);
+	UniFormat(cm->StatudBar3, sizeof(cm->StatudBar3), _UU("CM_PRODUCT_NAME"), CEDAR_VERSION_BUILD);
 
 	cm->Icon2 = LoadSmallIcon(ICO_SERVER_OFFLINE);
 	cm->Icon3 = LoadSmallIcon(ICO_VPN);

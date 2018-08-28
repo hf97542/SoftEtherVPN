@@ -143,10 +143,8 @@ namespace BuildUtil
 			@"bin\BuiltHamcoreFiles",
 			@"bin\hamcore",
 			"Cedar",
-			"Ham",
 			"Mayaqua",
 			"Neo",
-			"VGate",
 			"vpnbridge",
 			"vpnclient",
 			"vpncmd",
@@ -161,9 +159,9 @@ namespace BuildUtil
 		public readonly string CrossCompilerOption;
 		public readonly string SrcKitDefaultDir;
 
-		public BuildSoftwareUnix(Software software, int buildNumber, int version, string buildName, Cpu cpu, OS os, 
+		public BuildSoftwareUnix(Software software, int versionMajor, int versionMinor, int versionBuild, string buildName, Cpu cpu, OS os, 
 			string crossLibName, bool useGccBitsOption, string crossCompilerName, bool noPthreadOption, string crossCompilerOption)
-			: base(software, buildNumber, version, buildName, cpu, os)
+			: base(software, versionMajor, versionMinor, versionBuild, buildName, cpu, os)
 		{
 			this.CrossLibName = crossLibName;
 			this.UseGccBitsOption = useGccBitsOption;
@@ -433,13 +431,13 @@ namespace BuildUtil
 		{
 			get
 			{
-				int build, version;
+				int versionMajor, versionMinor, versionBuild;
 				string name;
 				DateTime date;
-				Win32BuildUtil.ReadBuildInfoFromTextFile(out build, out version, out name, out date);
+				Win32BuildUtil.ReadBuildInfoFromTextFile(out versionMajor, out versionMinor, out versionBuild, out name, out date);
 				return string.Format("{0}-{3}-{1}.tar.gz", "srckit", this.CrossLibName,
 					Str.DateTimeToStrShort(BuildSoftwareList.ListCreatedDateTime),
-					build);
+					versionBuild);
 			}
 		}
 
@@ -996,15 +994,6 @@ namespace BuildUtil
 				{
 					// Include libpcap.a only when cross-compiling for Mac OS X
 					libs.Add(string.Format("lib/{0}.a", "libpcap"));
-				}
-			}
-
-			if (this.Os == OSList.Linux)
-			{
-				if (this.Cpu == CpuList.x86 || this.Cpu == CpuList.x64)
-				{
-					// Include libintelaes.a only for x86 / x64 in Linux
-					libs.Add(string.Format("lib/{0}.a", "libintelaes"));
 				}
 			}
 

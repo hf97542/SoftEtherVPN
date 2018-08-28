@@ -170,6 +170,7 @@ struct ACCOUNT
 	CLIENT_OPTION *ClientOption;			// Client Option
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool CheckServerCert;					// Check the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	bool StartupAccount;					// Start-up account
 	UCHAR ShortcutKey[SHA1_SIZE];			// Key
@@ -195,6 +196,7 @@ struct CLIENT_CONFIG
 	UINT KeepConnectProtocol;				// Protocol
 	UINT KeepConnectInterval;				// Interval
 	bool NoChangeWcmNetworkSettingOnWindows8;	// Don't change the WCM network settings on Windows 8
+	bool NicDownOnDisconnect;				// Put NIC down on disconnect/connection loss and put it up again after connecting to VPN server
 };
 
 // Version acquisition
@@ -347,6 +349,7 @@ struct RPC_CLIENT_CREATE_ACCOUNT
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool StartupAccount;					// Startup account
 	bool CheckServerCert;					// Checking of the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	UCHAR ShortcutKey[SHA1_SIZE];			// Shortcut Key
 };
@@ -399,6 +402,7 @@ struct RPC_CLIENT_GET_ACCOUNT
 	CLIENT_AUTH *ClientAuth;				// Client authentication data
 	bool StartupAccount;					// Startup account
 	bool CheckServerCert;					// Check the server certificate
+	bool RetryOnServerCert;					// Retry on invalid server certificate
 	X *ServerCert;							// Server certificate
 	UCHAR ShortcutKey[SHA1_SIZE];			// Shortcut Key
 	UINT64 CreateDateTime;					// Creation date and time (Ver 3.0 or later)
@@ -427,9 +431,9 @@ struct RPC_CLIENT_GET_CONNECTION_STATUS
 	X *ServerX;								// Server certificate
 	X *ClientX;								// Client certificate
 	UINT64 StartTime;						// Connection start time
-	UINT64 FirstConnectionEstablisiedTime;	// Connection completion time of the first connection
+	UINT64 FirstConnectionEstablishedTime;	// Connection completion time of the first connection
 	UINT64 CurrentConnectionEstablishTime;	// Connection completion time of this connection
-	UINT NumConnectionsEatablished;			// Number of connections have been established so far
+	UINT NumConnectionsEstablished;			// Number of connections have been established so far
 	bool HalfConnection;					// Half-connection
 	bool QoS;								// VoIP / QoS
 	UINT MaxTcpConnections;					// Maximum number of the TCP connections
@@ -598,9 +602,6 @@ void CcSetServiceToForegroundProcess(REMOTE_CLIENT *r);
 char *CiGetFirstVLan(CLIENT *c);
 void CiNormalizeAccountVLan(CLIENT *c);
 
-bool CompareInternetSetting(INTERNET_SETTING *s1, INTERNET_SETTING *s2);
-
-
 void CnStart();
 void CnListenerProc(THREAD *thread, void *param);
 
@@ -642,7 +643,6 @@ SOCK *CncConnect();
 SOCK *CncConnectEx(UINT timeout);
 void CncReleaseSocket();
 void CncExit();
-UINT CncGetSessionId();
 bool CncExecDriverInstaller(char *arg);
 SOCK *CncStatusPrinterWindowStart(SESSION *s);
 void CncStatusPrinterWindowPrint(SOCK *s, wchar_t *str);
@@ -651,7 +651,6 @@ void CncStatusPrinterWindowThreadProc(THREAD *thread, void *param);
 bool CncConnectErrorDlg(SESSION *session, UI_CONNECTERROR_DLG *dlg);
 void CncConnectErrorDlgHaltThread(THREAD *thread, void *param);
 bool CncPasswordDlg(SESSION *session, UI_PASSWORD_DLG *dlg);
-void CncPasswordDlgHaltThread(THREAD *thread, void *param);
 void CncCheckCert(SESSION *session, UI_CHECKCERT *dlg);
 void CncCheckCertHaltThread(THREAD *thread, void *param);
 bool CncSecureSignDlg(SECURE_SIGN *sign);
@@ -662,7 +661,6 @@ void CncNicInfoFree(SOCK *s);
 
 void CtStartClient();
 void CtStopClient();
-CLIENT *CtGetClient();
 void CtReleaseClient(CLIENT *c);
 bool CtGetClientVersion(CLIENT *c, RPC_CLIENT_VERSION *ver);
 bool CtGetCmSetting(CLIENT *c, CM_SETTING *s);
@@ -793,13 +791,9 @@ bool CiTryToParseAccount(BUF *b);
 bool CiTryToParseAccountFile(wchar_t *name);
 bool CiEraseSensitiveInAccount(BUF *b);
 bool CiHasAccountSensitiveInformation(BUF *b);
-bool CiHasAccountSensitiveInformationFile(wchar_t *name);
 void CiApplyInnerVPNServerConfig(CLIENT *c);
-SERVER *CiNewInnerVPNServer(CLIENT *c, bool relay_server);
-void CiFreeInnerVPNServer(CLIENT *c, SERVER *s);
 void CiIncrementNumActiveSessions();
 void CiDecrementNumActiveSessions();
-UINT CiGetNumActiveSessions();
 
 BUF *EncryptPassword(char *password);
 BUF *EncryptPassword2(char *password);
@@ -824,7 +818,6 @@ void InRpcClientEnumSecure(RPC_CLIENT_ENUM_SECURE *e, PACK *p);
 void OutRpcClientEnumSecure(PACK *p, RPC_CLIENT_ENUM_SECURE *e);
 void InRpcUseSecure(RPC_USE_SECURE *u, PACK *p);
 void OutRpcUseSecure(PACK *p, RPC_USE_SECURE *u);
-void InRpcEnumObjectInSecure(RPC_ENUM_OBJECT_IN_SECURE *e, PACK *p);
 void OutRpcEnumObjectInSecure(PACK *p, RPC_ENUM_OBJECT_IN_SECURE *e);
 void InRpcCreateVLan(RPC_CLIENT_CREATE_VLAN *v, PACK *p);
 void OutRpcCreateVLan(PACK *p, RPC_CLIENT_CREATE_VLAN *v);
@@ -854,8 +847,6 @@ void InRpcPolicy(POLICY *o, PACK *p);
 void OutRpcPolicy(PACK *p, POLICY *o);
 void InRpcClientGetConnectionStatus(RPC_CLIENT_GET_CONNECTION_STATUS *s, PACK *p);
 void OutRpcClientGetConnectionStatus(PACK *p, RPC_CLIENT_GET_CONNECTION_STATUS *c);
-void InRpcClientNotify(RPC_CLIENT_NOTIFY *n, PACK *p);
-void OutRpcClientNotify(PACK *p, RPC_CLIENT_NOTIFY *n);
 void InRpcClientConfig(CLIENT_CONFIG *c, PACK *p);
 void OutRpcClientConfig(PACK *p, CLIENT_CONFIG *c);
 void InRpcClientPasswordSetting(RPC_CLIENT_PASSWORD_SETTING *a, PACK *p);

@@ -1390,7 +1390,7 @@ UINT GetGlobalServerFlag(UINT index)
 	return global_server_flags[index];
 }
 
-// Main of the aquisition of Caps of the server
+// Main of the acquisition of Caps of the server
 void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 {
 	bool is_restricted = false;
@@ -1558,7 +1558,7 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 	// Maximum NAT table size / Virtual HUB
 	AddCapsInt(t, "i_max_secnat_tables", NAT_MAX_SESSIONS);
 
-	// Cascade connction
+	// Cascade connection
 	if (s->ServerType == SERVER_TYPE_STANDALONE)
 	{
 		AddCapsBool(t, "b_support_cascade", true);
@@ -1616,11 +1616,12 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 
 	if (IsBridgeSupported())
 	{
-		// Tun / tap device is available (only Linux)
-		AddCapsBool(t, "b_tap_supported", GetOsInfo()->OsType == OSTYPE_LINUX ? true : false);
+		// TUN / TAP device availability (Linux and BSD)
+		const UINT OsType = GetOsInfo()->OsType;
+		AddCapsBool(t, "b_tap_supported", OsType == OSTYPE_LINUX || OsType == OSTYPE_BSD);
 	}
 
-	// Cascade connction
+	// Cascade connection
 	if (s->ServerType == SERVER_TYPE_STANDALONE)
 	{
 		AddCapsBool(t, "b_support_cascade", true);
@@ -1770,8 +1771,8 @@ void GetServerCapsMain(SERVER *s, CAPSLIST *t)
 	// UDP acceleration feature
 	AddCapsBool(t, "b_support_udp_acceleration", true);
 
-	// Intel AES Acceleration function
-	AddCapsBool(t, "b_support_intel_aes", IsIntelAesNiSupported());
+	// AES acceleration function
+	AddCapsBool(t, "b_support_aes_ni", IsAesNiSupported());
 
 #ifdef	OS_WIN32
 	// SeLow driver
@@ -2514,21 +2515,6 @@ void SiInitDefaultHubList(SERVER *s)
 	SiSetDefaultLogSetting(&g);
 	SetHubLogSetting(h, &g);
 
-	{
-		UINT i;
-		for (i = 0;i < 0;i++)
-		{
-			char tmp[MAX_SIZE];
-			USER *u;
-			sprintf(tmp, "user%u", i);
-			AcLock(h);
-			u = NewUser(tmp, L"test", L"", AUTHTYPE_ANONYMOUS, NULL);
-			AcAddUser(h, u);
-			ReleaseUser(u);
-			AcUnlock(h);
-		}
-	}
-
 	ReleaseHub(h);
 }
 
@@ -2564,9 +2550,6 @@ void SiLoadInitialConfiguration(SERVER *s)
 	{
 		return;
 	}
-
-	// Default to TLS only; mitigates CVE-2016-0800
-	s->Cedar->SslAcceptSettings.AcceptOnlyTls = true;
 
 	// Auto saving interval related
 	s->AutoSaveConfigSpan = SERVER_FILE_SAVE_INTERVAL_DEFAULT;
@@ -2794,7 +2777,7 @@ void SiInitConfiguration(SERVER *s)
 		}
 	}
 
-	if (s->DisableDosProction)
+	if (s->DisableDosProtection)
 	{
 		DisableDosProtect();
 	}
@@ -5781,7 +5764,6 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 	char tmp[MAX_SIZE];
 	X *x = NULL;
 	K *k = NULL;
-	bool cluster_allowed = false;
 	UINT num_connections_per_ip = 0;
 	FOLDER *params_folder;
 	UINT i;
@@ -5905,7 +5887,7 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		s->Cedar->DisableIPv6Listener = CfgGetBool(f, "DisableIPv6Listener");
 
 		// DoS
-		s->DisableDosProction = CfgGetBool(f, "DisableDosProction");
+		s->DisableDosProtection = CfgGetBool(f, "DisableDosProtection");
 
 		// Num Connections Per IP
 		SetMaxConnectionsPerIp(CfgGetInt(f, "MaxConnectionsPerIP"));
@@ -5960,9 +5942,6 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 
 		// Disable the NAT-traversal feature
 		s->DisableNatTraversal = CfgGetBool(f, "DisableNatTraversal");
-
-		// Intel AES
-		s->DisableIntelAesAcceleration = CfgGetBool(f, "DisableIntelAesAcceleration");
 
 		if (s->Cedar->Bridge == false)
 		{
@@ -6046,13 +6025,8 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		}
 		Unlock(c->TrafficLock);
 
-		// Get whether the current license allows cluster mode
-		cluster_allowed = true;
-
-
 		// Type of server
-		s->UpdatedServerType = s->ServerType = 
-			cluster_allowed ? CfgGetInt(f, "ServerType") : SERVER_TYPE_STANDALONE;
+		s->UpdatedServerType = s->ServerType = CfgGetInt(f, "ServerType");
 
 		// Password
 		if (CfgGetByte(f, "HashedPassword", s->HashedPassword, sizeof(s->HashedPassword)) != sizeof(s->HashedPassword))
@@ -6150,16 +6124,6 @@ void SiLoadServerCfg(SERVER *s, FOLDER *f)
 		// Disable session reconnect
 		SetGlobalServerFlag(GSF_DISABLE_SESSION_RECONNECT, CfgGetBool(f, "DisableSessionReconnect"));
 
-		// AcceptOnlyTls
-		if (CfgIsItem(f, "AcceptOnlyTls"))
-		{
-			c->SslAcceptSettings.AcceptOnlyTls = CfgGetBool(f, "AcceptOnlyTls");
-		}
-		else
-		{
-			// Default to TLS only; mitigates CVE-2016-0800
-			c->SslAcceptSettings.AcceptOnlyTls = true;
-		}
 		c->SslAcceptSettings.Tls_Disable1_0 = CfgGetBool(f, "Tls_Disable1_0");
 		c->SslAcceptSettings.Tls_Disable1_1 = CfgGetBool(f, "Tls_Disable1_1");
 		c->SslAcceptSettings.Tls_Disable1_2 = CfgGetBool(f, "Tls_Disable1_2");
@@ -6329,7 +6293,7 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 		CfgAddBool(f, "DisableIPv6Listener", s->Cedar->DisableIPv6Listener);
 
 		// DoS
-		CfgAddBool(f, "DisableDosProction", s->DisableDosProction);
+		CfgAddBool(f, "DisableDosProtection", s->DisableDosProtection);
 
 		// MaxConnectionsPerIP
 		CfgAddInt(f, "MaxConnectionsPerIP", GetMaxConnectionsPerIp());
@@ -6386,9 +6350,6 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 			// VPN over DNS
 			CfgAddBool(f, "EnableVpnOverDns", s->EnableVpnOverDns);
 		}
-
-		// Intel AES
-		CfgAddBool(f, "DisableIntelAesAcceleration", s->DisableIntelAesAcceleration);
 
 		if (c->Bridge == false)
 		{
@@ -6487,7 +6448,6 @@ void SiWriteServerCfg(FOLDER *f, SERVER *s)
 		CfgAddBool(f, "DisableGetHostNameWhenAcceptTcp", s->DisableGetHostNameWhenAcceptTcp);
 		CfgAddBool(f, "DisableCoreDumpOnUnix", s->DisableCoreDumpOnUnix);
 
-		CfgAddBool(f, "AcceptOnlyTls", c->SslAcceptSettings.AcceptOnlyTls);
 		CfgAddBool(f, "Tls_Disable1_0", c->SslAcceptSettings.Tls_Disable1_0);
 		CfgAddBool(f, "Tls_Disable1_1", c->SslAcceptSettings.Tls_Disable1_1);
 		CfgAddBool(f, "Tls_Disable1_2", c->SslAcceptSettings.Tls_Disable1_2);
@@ -10996,12 +10956,6 @@ SERVER *SiNewServerEx(bool bridge, bool in_client_inner_server, bool relay_serve
 
 	SetFifoCurrentReallocMemSize(MEM_FIFO_REALLOC_MEM_SIZE);
 
-
-	if (s->DisableIntelAesAcceleration)
-	{
-		// Disable the Intel AES acceleration
-		DisableIntelAesAccel();
-	}
 
 	// Raise the priority
 	if (s->NoHighPriorityProcess == false)
